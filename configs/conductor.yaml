@@ -1,0 +1,77 @@
+# Model
+model:
+  model_type: Imagen  # Imagen, ElucidatedImagen, Dalle2
+
+# Trainer
+trainer:
+  # Setup
+  multi_gpu: False # True | False
+  idx: 0 # 0 | 1
+
+  # Model
+  use_existing_model: False
+  PATH_MODEL_CHECKPOINT: imagen_checkpoint.pt
+
+  PATH_MODEL_LOAD1: ./assets/model/imagen_model_u1.pt
+  PATH_MODEL_LOAD2: ./assets/model/imagen_model_u2.pt
+
+  PATH_MODEL_SAVE1: ./assets/model/imagen_model_u1.pt
+  PATH_MODEL_SAVE2: ./assets/model/imagen_model_u2.pt
+
+  # Imagen Trainer
+  split_valid_from_train: False
+  dl_tuple_output_keywords_names:
+    - images
+    - text_embeds
+
+  # Dataloader
+  shuffle: True
+  num_workers: 4    
+  batch_size: 4    
+  pin_memory: True  
+  
+  # Training
+  max_epochs: 100000    # Maximal number of epochs
+  unet_number: 1        # train unet 1 or 2
+  param_tuning: False
+
+# Validation
+validation:
+  PATH_MODEL_VALIDATION: ./assets/model/imagen_checkpoint.pt
+  PATH_TRAINING_SAMPLE: ./results/training/
+
+  interval:
+    valid_loss: 20
+    validate_model: 5000
+
+  # Sampling (while training)
+  display_samples: True
+  sample_quantity: 10   
+  sample_seed: 1
+  cond_scale: 7  # 1 to 10 for image sampling
+
+# Testing
+testing:
+  PATH_MODEL_TESTING: ./assets/model/imagen_model_u2.pt
+  PATH_TEST_SAMPLE: ./results/testing
+  
+  # Sampling
+  unet_number: 1
+  sample_quantity: 10000
+  sample_seed: 1
+  save_samples: True
+  save_image_tensors: True
+  only_triplets: True
+  cond_scale: 5  # 1 to 10
+  loss_weighting: p2   # p2
+  text:  
+  text_dict_index: 17
+  phase_name:
+
+  # Define Batch Boundaries to parallize sampling
+  lower_batch: 0
+  upper_batch: 100 
+
+wandb:                            
+  project: "MultiphaseGen" 
+  api_key: "c27604c3e83e8c005219aefde825db36fd2f5cf4"
