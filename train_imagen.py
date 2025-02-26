@@ -72,9 +72,9 @@ def train_imagen(config, args):
         log_interface.watch(model.trainer)
     
     # Early Stopping setup
-    early_stopping = EarlyStopping(patience=3000, min_delta=1e-4)
+    early_stopping = EarlyStopping(patience=5000, min_delta=1e-4)
 
-    best_valid_loss = float("inf")
+    old_valid_loss = 1e26
     table_data = {}
     
     #  Training    
@@ -127,35 +127,34 @@ def train_imagen(config, args):
 
                 if args.wandb:
                     log_interface.log_images(table_data, epoch, config["validation"]["interval"]["validate_model"])
-
-            model.trainer.save(os.path.join(model_checkpoint_dir, f"{args.model_type}_checkpoint-u{unet_number}.pt"))
-            
-        # # Save best model   
-        # log_interface.step(epoch=epoch)
-            
-        # mean_valid_loss = log_interface.log_avg.get("valid/loss", float("inf"))
-        # save_dict = {
-        #     "epoch": epoch,
-        #     "model_state_dict": {k: v.cpu() for k, v in model.trainer.state_dict().items()},
-        #     "loss": mean_valid_loss
-        # }
         
-        # save_path = os.path.join(model_checkpoint_dir, "last.pt")
-        # torch.save(save_dict, save_path)
+        # Save best model   
+        log_interface.step(epoch=epoch)
+                
+        mean_valid_loss = log_interface.log_avg.get("valid/loss", None)
             
-        # del save_dict
-        # torch.cuda.empty_cache()
+        if mean_valid_loss is not None:
+            save_dict = {
+                "epoch": epoch,
+                "model_state_dict": model.trainer.state_dict(),
+                "loss": mean_valid_loss
+            }
 
-        # if mean_valid_loss <= old_valid_loss:
-        #     old_valid_loss = mean_valid_loss
-        #     torch.save(save_dict, os.path.join(model_checkpoint_dir, "best.pt"))
-        # torch.cuda.empty_cache()
-        
-        # torch.save(save_dict, os.path.join(model_checkpoint_dir, "last.pt"))
-        # torch.cuda.empty_cache()
+            if mean_valid_loss <= old_valid_loss:
+                old_valid_loss = mean_valid_loss
+                    
+                save_path = os.path.join(model_checkpoint_dir, "best.pt")
+                torch.save(save_dict, save_path)
+                model.trainer.save(save_path)
+            # torch.cuda.empty_cache()
+            
+            save_path = os.path.join(model_checkpoint_dir, "last.pt")
+            torch.save(save_dict, save_path)
+            model.trainer.save(save_path)
+            # torch.cuda.empty_cache()
         
     model.trainer.save(os.path.join(model_checkpoint_dir, f"{args.model_type}_unet{unet_number}.pt"))
-    # log_interface.log_model()
+    log_interface.log_model()
 
     log_interface.close()
     print("Logging closed. Training complete.")

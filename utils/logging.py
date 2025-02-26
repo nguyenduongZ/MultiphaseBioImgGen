@@ -75,11 +75,25 @@ class Logging:
                 else:
                     raise ValueError(f"key: {log_key} wrong format")
                 
-        if self.__args.wandb:
-            self.__update_wandb()
-            
-        if self.__args.log:
-            self.__update_board()
+            else:
+                if "train" in log_key:
+                    self.__log_avg[log_key] = self.__log[log_key] / self.__args.num_train_sample
+                    
+                elif "valid" in log_key:
+                    self.__log_avg[log_key] = self.__log[log_key] / self.__args.num_valid_sample
+                    
+                elif "test" in log_key:
+                    self.__log_avg[log_key] = self.__log[log_key] / self.__args.num_sample
+                
+                else:
+                    raise ValueError(f"key: {log_key} wrong format")
+        
+        if not (epoch % self.__args.valid_loss):                    
+            if self.__args.wandb:
+                self.__update_wandb()
+                
+            if self.__args.log:
+                self.__update_board()
             
         self.__reset_epoch()
             

@@ -42,6 +42,8 @@ if __name__ == "__main__":
                         help="validate_model")
     parser.add_argument("--cond_scale", type=int, default=-1, choices=range(1, 11), 
                         help="cond_scale")
+    parser.add_argument("--valid_loss", type=int, default=-1, 
+                        help="valid_loss")
     
     # LOGGING
     parser.add_argument("--wandb", action="store_true", 
@@ -69,20 +71,31 @@ if __name__ == "__main__":
             "epochs": ("trainer", "epochs"),
             "unet_number": ("trainer", "unet_number"),
             "validate_model": ("validation", "interval", "validate_model"),
-            "cond_scale": ("testing", "cond_scale"),
+            "cond_scale": [("validation", "cond_scale"), ("testing", "cond_scale")],
             "seed": ("trainer", "seed")
         }
         
         for key, value in vars(args).items():
             if value not in [None, -1]:
                 if key in mapping:
-                    keys = mapping[key]
-                    ref = config
-                    for k in keys[:-1]:
-                        if k not in ref:
-                            ref[k] = {}
-                        ref = ref[k]
-                    ref[keys[-1]] = value
+                    paths = mapping[key]
+                    
+                    if isinstance(paths[0], tuple): 
+                        for path in paths:
+                            ref = config
+                            for k in path[:-1]:
+                                if k not in ref:
+                                    ref[k] = {}
+                                ref = ref[k]
+                            ref[path[-1]] = value
+                    
+                    else:
+                        ref = config
+                        for k in paths[:-1]:
+                            if k not in ref:
+                                ref[k] = {}
+                            ref = ref[k]
+                        ref[paths[-1]] = value
                 
     update_config(config, args)
 
