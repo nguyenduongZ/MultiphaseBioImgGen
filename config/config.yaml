@@ -1,0 +1,254 @@
+seed: 42
+### Model
+model:
+  model_type: Imagen
+  Imagen:
+    ## Architecture
+    unets:
+      # Unet1
+      unet1:
+        dim: 128
+        cond_dim: 512
+        dim_mults:
+          - 1
+          - 2
+          - 4
+          - 8
+        num_resnet_blocks: 3
+        layer_attns:
+          - False
+          - True
+          - True
+          - True
+        layer_cross_attns:
+          - False
+          - True
+          - True
+          - True
+
+      # Unet2
+      unet2:
+        dim: 128
+        cond_dim: 512
+        dim_mults:
+          - 1
+          - 2
+          - 4
+          - 8
+        num_resnet_blocks:
+          - 2
+          - 4
+          - 8
+          - 8
+        layer_attns:
+          - False
+          - False
+          - False
+          - True
+        layer_cross_attns:
+          - False
+          - False
+          - False
+          - True
+
+    # Imagen Model
+    imagen:
+      image_sizes:
+        - 64
+        - 256
+      text_embed_dim: 768                     #T5: 768
+      text_encoder_name: google/t5-v1_1-base  #T5: google/t5-v1_1-base
+
+      timesteps: 1000
+      cond_drop_prob: 0.1
+      loss_type: l2
+      noise_schedules: cosine
+      pred_objectives: noise
+      lowres_noise_schedule: linear
+      lowres_sample_noise_level: 0.2          # in the paper, they present a new trick where they noise the lowres conditioning image, and at sample time, fix it to a certain level (0.1 or 0.3) - the unets are also made to be conditioned on this noise level
+      condition_on_text: True
+      only_train_unet_number: None
+      dynamic_thresholding_percentile: 0.95   # unsure what this was based on perusal of paper
+  
+  ElucidatedImagen:
+    ## Architecture
+    unets:
+      # Unet1
+      unet1:
+        dim: 128
+        cond_dim: 512
+        dim_mults:
+          - 1
+          - 2
+          - 4
+          - 8
+        num_resnet_blocks: 3
+        layer_attns:
+          - False
+          - True
+          - True
+          - True
+        layer_cross_attns:
+          - False
+          - True
+          - True
+          - True
+
+      # Unet2
+      unet2:
+        dim: 128
+        cond_dim: 512
+        dim_mults:
+          - 1
+          - 2
+          - 4
+          - 8
+        num_resnet_blocks:
+          - 2
+          - 4
+          - 8
+          - 8
+        layer_attns:
+          - False
+          - False
+          - False
+          - True
+        layer_cross_attns:
+          - False
+          - False
+          - False
+          - True
+    elucidated_imagen:
+      image_sizes:
+        - 64
+        - 256
+      text_embed_dim: 768                     #T5: 768
+      text_encoder_name: google/t5-v1_1-base  #T5: google/t5-v1_1-base
+
+      # Variables
+      lowres_sample_noise_level: 0.2          # in the paper, they present a new trick where they noise the lowres conditioning image, and at sample time, fix it to a certain level (0.1 or 0.3) - the unets are also made to be conditioned on this noise level
+      dynamic_thresholding_percentile: 0.95   # unsure what this was based on perusal of paper
+      only_train_unet_number: None            
+      lowres_noise_schedule: linear           
+      num_sample_steps: 32                    # number of sampling steps (64, 32)
+      cond_drop_prob: 0.1
+      sigma_min: 0.002                        # min noise level
+      sigma_max: 80                           # max noise level
+      sigma_data: 0.5                         # standard deviation of data distribution
+      rho: 7                                  # controls the sampling schedule
+      P_mean: -1.2                            # mean of log-normal distribution from which noise is drawn for training
+      P_std: 1.2                              # standard deviation of log-normal distribution from which noise is drawn for training
+      S_churn: 80                             # parameters for stochastic sampling - depends on dataset, Table 5 in apper
+      S_tmin: 0.05
+      S_tmax: 50
+      S_noise: 1.003
+
+### Data
+data:
+  ds: VinDrMultiphase
+  
+  VinDrMultiphase:
+    PATH_DICOM_DIR: "./asset/data/vindr_multiphase/abdomen_phases"
+    PATH_PNG_DIR: "./asset/data/vindr_multiphase/abdomen_phases_png"
+    PATH_METADATA_PROMPT_FILE: "./asset/data/vindr_multiphase/metadata_prompt.csv"
+
+    PATH_TRAIN_EMBEDDING_FILE: "./asset/data/vindr_multiphase/train_t5_embedding.pt"
+    PATH_VALID_EMBEDDING_FILE: "./asset/data/vindr_multiphase/valid_t5_embedding.pt"
+    PATH_TEST_EMBEDDING_FILE: "./asset/data/vindr_multiphase/sample_t5_embedding.pt"
+    
+    valid_size: 0.15
+    image_size: 256
+
+    classes:
+      Non-contrast: non_contrast 
+      Aterial: aterial
+      Venous: venous
+
+### Trainer
+trainer:
+  multi_gpu: False
+  use_existing_model: False
+
+  split_valid_from_train: False
+  dl_tuple_output_keywords_names:
+    - images
+    - text_embeds
+
+  ### DataLoader:
+  batch_size: 16
+  num_workers: 8
+  pin_memory: True
+
+  ## Training
+  idx: 0
+  epochs: 100000
+  unet_number: 1
+  seed: 42
+
+  PATH_MODEL_CHECKPOINT: ./asset/results/training/VinDrMultiphase_u1_Imagen/exp_0/model/Imagen_checkpoint-u1.pt
+  PATH_MODEL_LOAD: ./asset/results/training/VinDrMultiphase_u1_Imagen/exp_0/model/Imagen_unet1.pt
+  PATH_MODEL_SAVE: ./asset/results/training/VinDrMultiphase_u1_Imagen/exp_0/model/Imagen_unet2.pt
+
+### Validation
+validation:
+  path_training_sample: ./result/training
+  display_sample: True
+  
+  interval:
+    valid_loss: 20
+    validate_model: 5000
+
+  sample_quantity: 1
+  seed: 42
+  cond_scale: 7
+
+### Testing
+testing:
+  PATH_MODEL_TESTING: /media/mountHDD2/duong/git/MultiphaseBioImgGen/asset/results/training/2025-01-22-22:28:57_u1_Imagen/elucidated_imagen_checkpoint-u1.pt
+  
+  unet_number: 2
+  sample_quantity: 10000
+  save_samples: True
+  save_image_tensors: True
+  cond_scale: 5 # 1 to 10
+  loss_weighting: p2
+  text:
+  phase:
+
+  # Define Batch Boundaries to parallize sampling
+  lower_batch: 0
+  upper_batch: 100 
+
+  # Kernel Inception Distance
+  KernelInceptionDistance:
+    usage: True
+    params:
+      feature: 2048
+      subsets: 10
+      subset_size: 1000
+      reset_real_features: True
+      normalize: True
+
+  # Clean Fréchet Inception Distance
+  CleanFID:
+    usage: True
+    params:
+      mode: clean
+      model_name: inception_v3
+      num_workers: 4
+      batch_size: 32 
+
+  # Fréchet CLIP Distance
+  FrechetCLIPDistance:
+    usage: True
+    params:
+      mode: clean
+      model_name: clip_vit_b_32
+      num_workers: 4
+      batch_size: 32 
+
+  #
+  LearnedPerceptualImagePatchSimilarity:
+    usage: False
+    params:
+      net_type: vgg
