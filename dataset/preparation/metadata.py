@@ -1,4 +1,5 @@
 import os, sys
+sys.path.append(os.path.abspath(os.curdir))
 import csv
 import pandas as pd
 
@@ -23,8 +24,7 @@ FIELDS = [
 def extract_metadata(dcm_file, dcm_dir):
     try:
         dataset = dcmread(dcm_file, stop_before_pixels=True)
-        image_path = dcm_file.replace(dcm_dir, dcm_dir + "_png").replace(".dicom", ".png").replace(".dcm", ".png")
-        image_path = "./" + os.path.relpath(image_path, project_root)
+        image_path = "./" + os.path.relpath(dcm_file, project_root)
         
         metadata = {field: getattr(dataset, field, None) for field in FIELDS if field != "image_path"}
         metadata["image_path"] = image_path

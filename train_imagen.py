@@ -46,18 +46,7 @@ def train_imagen(config, args):
     model = get_model(config=config, model_type=model_type, device=device)
     unet_number = config["trainer"]["unet_number"]
     
-    # Load checkpoint
-    if unet_number == 2:
-        unet1_path = os.path.join(model_checkpoint_dir, f"{model_type}_unet1.pt")
-        
-        if os.path.exists(unet1_path):
-            print(f"Loading Unet 1 model from: {unet1_path}")
-            model.trainer.load(unet1_path)
-    
     model_save_path = os.path.join(model_checkpoint_dir, f"{model_type}_unet{unet_number}.pt")
-    if os.path.exists(model_save_path):
-        print(f"Loading checkpoint: {model_save_path}")
-        model.trainer.load(model_save_path)
         
     # Data setup
     data, config = get_ds(config=config, args=args)
@@ -128,32 +117,34 @@ def train_imagen(config, args):
                 if args.wandb:
                     log_interface.log_images(table_data, epoch, config["validation"]["interval"]["validate_model"])
         
-        # Save best model   
-        log_interface.step(epoch=epoch)
+            model.trainer.save(os.path.join(model_checkpoint_dir, f"{args.model_type}_checkpoint-u{unet_number}.pt"))
+            
+        # # Save best model   
+        # log_interface.step(epoch=epoch)
                 
-        mean_valid_loss = log_interface.log_avg.get("valid/loss", None)
+        # mean_valid_loss = log_interface.log_avg.get("valid/loss", None)
             
-        if mean_valid_loss is not None:
-            save_dict = {
-                "epoch": epoch,
-                "model_state_dict": model.trainer.state_dict(),
-                "loss": mean_valid_loss
-            }
+        # if mean_valid_loss is not None:
+        #     save_dict = {
+        #         "epoch": epoch,
+        #         "model_state_dict": model.trainer.state_dict(),
+        #         "loss": mean_valid_loss
+        #     }
 
-            if mean_valid_loss <= old_valid_loss:
-                old_valid_loss = mean_valid_loss
+        #     if mean_valid_loss <= old_valid_loss:
+        #         old_valid_loss = mean_valid_loss
                     
-                save_path = os.path.join(model_checkpoint_dir, "best.pt")
-                torch.save(save_dict, save_path)
-                model.trainer.save(save_path)
-            # torch.cuda.empty_cache()
+        #         save_path = os.path.join(model_checkpoint_dir, "best.pt")
+        #         torch.save(save_dict, save_path)
+        #         model.trainer.save(save_path)
+        #     # torch.cuda.empty_cache()
             
-            save_path = os.path.join(model_checkpoint_dir, "last.pt")
-            torch.save(save_dict, save_path)
-            model.trainer.save(save_path)
-            # torch.cuda.empty_cache()
+        #     save_path = os.path.join(model_checkpoint_dir, "last.pt")
+        #     torch.save(save_dict, save_path)
+        #     model.trainer.save(save_path)
+        #     # torch.cuda.empty_cache()
         
-    model.trainer.save(os.path.join(model_checkpoint_dir, f"{args.model_type}_unet{unet_number}.pt"))
+    model.trainer.save(model_save_path)
     log_interface.log_model()
 
     log_interface.close()

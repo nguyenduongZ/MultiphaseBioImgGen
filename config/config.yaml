@@ -187,6 +187,7 @@ trainer:
 
   PATH_MODEL_CHECKPOINT: ./asset/results/training/VinDrMultiphase_u1_Imagen/exp_0/model/Imagen_checkpoint-u1.pt
   PATH_MODEL_LOAD: ./asset/results/training/VinDrMultiphase_u1_Imagen/exp_0/model/Imagen_unet1.pt
+  PATH_MODEL_SAVE: ./asset/results/training/VinDrMultiphase_u1_Imagen/exp_0/model/Imagen_unet2.pt
 
 ### Validation
 validation:

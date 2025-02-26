@@ -16,7 +16,7 @@ class Logging:
             with open(args.config, "r") as f:
                 config = yaml.safe_load(f)
             
-            args.run_name = f"{args.ds}_u{args.unet_number}_{args.model_type}__{int(time.time())}"
+            args.run_name = f"{args.ds}_u{args.unet_number}_{args.model_type}_{args.cond_scale}__{int(time.time())}"
             
             self.__run = wandb.init(
                 project=args.wandb_prj,

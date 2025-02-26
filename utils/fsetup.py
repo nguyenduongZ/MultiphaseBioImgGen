@@ -4,6 +4,17 @@ import shutil
 
 from datetime import datetime
 
+def get_main_directory(current_file, marker_dirs=("asset", "dataset", ".git")):
+    current_dir = os.path.abspath(os.path.dirname(current_file))
+    
+    while current_dir != os.path.dirname(current_dir):
+        if any(os.path.isdir(os.path.join(current_dir, marker)) for marker in marker_dirs):
+            return current_dir
+        
+        current_dir = os.path.dirname(current_dir)
+        
+    return None
+
 def folder_setup(args):
     run_dir = os.getcwd() + f"/asset/results/{args.mode}"
     if not os.path.exists(run_dir):
