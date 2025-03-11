@@ -1,5 +1,4 @@
 import os, sys
-sys.path.append(os.path.abspath(os.curdir))
 import csv
 import pandas as pd
 
@@ -8,9 +7,9 @@ from pydicom import dcmread
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor
 
-from utils import get_main_directory
+from utils import Opt, get_project_root
 
-project_root = get_main_directory(__file__)
+project_root = get_project_root(__file__)
 if project_root is None:
     raise RuntimeError("Project root directory not found. Please check the directory structure again!")
 
@@ -28,13 +27,14 @@ def extract_metadata(dcm_file, dcm_dir):
         
         metadata = {field: getattr(dataset, field, None) for field in FIELDS if field != "image_path"}
         metadata["image_path"] = image_path
-
+        
         return metadata
     
     except Exception as e:
         print(f"Error processing file {dcm_file}: {e}")
+        
         return None
-
+    
 def get_dcm_files(dcm_dir):
     dcm_files = []
     print("Scanning for DICOM files...")
@@ -61,20 +61,22 @@ def process_files(dcm_files, dcm_dir, output_csv, workers):
             for result in tqdm(executor.map(process_func, dcm_files), total=len(dcm_files), desc="Processing DICOM files"):
                 if result:
                     writer.writerow(result)
-
+                    
 if __name__ == "__main__":
-    dcm_dir = os.path.join(project_root, "asset/data/vindr_multiphase/abdomen_phases")
-    output_csv = os.path.join(project_root, "asset/data/vindr_multiphase/metadata1.csv")
-
+    opt = Opt()
+    
+    dcm_dir = opt.dataset["data"]["VindrMultiphase"]["PATH_DICOM_DIR"]
+    output_csv = opt.dataset["data"]["VindrMultiphase"]["PATH_METADATA_PROMPT_FILE"]
+    
     dcm_files = get_dcm_files(dcm_dir)
-
+    
     if not dcm_files:
-        print("No DICOM file found in the specified directory.")
-        sys.exit(1)    
-
-    print(f"Processing {len(dcm_files)} DICOM files...")
-
+        opt.logger.info("No DICOM file found in the specified directory.")
+        sys.exit(1)
+        
+    opt.logger.debug(f"Processing {len(dcm_files)} DICOM files...")
+    
     process_files(dcm_files, dcm_dir, output_csv, workers=4) 
-
+    
     df = pd.read_csv(output_csv, low_memory=False)
-    print(f"Metadata shape: {df.shape}")
+    opt.logger.debug(f"Metadata shape: {df.shape}")

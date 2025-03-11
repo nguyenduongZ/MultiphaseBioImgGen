@@ -1,31 +1,30 @@
 import os, sys
 import cv2
 import torch
-import pickle
 import pandas as pd
 import albumentations as A
 
 from tqdm import tqdm
 from PIL import Image
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold
 
 from .preprocessing import initialize_t5, compute_global_max_length, t5_encode_text
 from .basedataset import BaseDataset
-from utils import check_dataset_name, check_text_encoder
+from utils import check_dataset_name, check_text_encoder, Opt
 
 class VinDrMultiphase(BaseDataset):
-    def __init__(self, config):
+    def __init__(self, opt: Opt):
         self.dataset_name = "VinDrMultiphase"
-        self.config = config
+        self.opt = opt
 
-        initialize_t5(idx=config["trainer"]["idx"])
+        initialize_t5(idx=opt.conductor["trainer"]["idx"])
         
         self._load_data_()
         self._set_df_splits_()
         self._set_text_embeddings_()
         
     def _load_data_(self):
-        csv_file = self.config["data"][self.dataset_name]["PATH_METADATA_PROMPT_FILE"]
+        csv_file = self.opt.dataset["data"][self.dataset_name]["PATH_METADATA_PROMPT_FILE"]
         if not os.path.exists(csv_file):
             raise FileNotFoundError(f"CSV file not found: {csv_file}")
 
@@ -33,44 +32,119 @@ class VinDrMultiphase(BaseDataset):
         
     @check_dataset_name    
     def _set_df_splits_(self):
-        valid_size = self.config["data"][self.dataset_name]["valid_size"]
-        random_state = self.config["seed"]
+        random_state = self.opt.conductor["seed"]
+        valid_size = self.opt.dataset["data"][self.dataset_name]["valid_size"]
+        k_folds = self.opt.dataset["data"][self.dataset_name]["k_folds"]
         
         unique_ids = self.df["StudyInstanceUID"].unique()
         train_ids, valid_ids = train_test_split(unique_ids, test_size=valid_size, random_state=random_state)
+
+        self.df_train = self.df[self.df["StudyInstanceUID"].isin(train_ids)].copy()
+        self.df_valid_patient = self.df[self.df["StudyInstanceUID"].isin(valid_ids)].copy()
+
+        df_slices = self.df_train[["StudyInstanceUID", "InstanceNumber", "Label"]].copy()
+        df_slices = df_slices.groupby(["StudyInstanceUID", "Label"]).apply(
+            lambda x: x.sort_values("InstanceNumber").iloc[::5]
+        ).reset_index(drop=True)
         
-        self.df_train = self.df[self.df["StudyInstanceUID"].isin(train_ids)]
-        self.df_valid = self.df[self.df["StudyInstanceUID"].isin(valid_ids)]
+        df_slices["FoldLabel"] = df_slices["StudyInstanceUID"] + "_" + df_slices["Label"]
+
+        skf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=random_state)
+        
+        self.kfolds = []
+
+        for train_idx, valid_idx in skf.split(df_slices, df_slices["FoldLabel"]):
+            train_slices_fold = df_slices.iloc[train_idx]
+            valid_slices_fold = df_slices.iloc[valid_idx]
+            
+            df_train_fold = self.df_train[self.df_train["InstanceNumber"].isin(train_slices_fold["InstanceNumber"])]
+            df_valid_fold = self.df_train[self.df_train["InstanceNumber"].isin(valid_slices_fold["InstanceNumber"])]
+            
+            self.kfolds.append((df_train_fold, df_valid_fold))
 
     @check_text_encoder    
     def _set_text_embeddings_(self):
+        batch_size = self.opt.conductor["trainer"]["batch_size"]        
+        global_max_length = compute_global_max_length(df_train=self.df_train, df_valid=self.df_valid_patient, batch_size=batch_size)
         
-        batch_size = self.config["trainer"]["batch_size"]        
+        for split, df in {"train": self.df_train, "valid_patient": self.df_valid_patient}.items():
+            path_embedding_file = self.opt.dataset["data"][self.dataset_name][f"PATH_{split.upper()}_EMBEDDING_FILE"]
+            self._generate_embeddings(df, path_embedding_file, global_max_length, batch_size, split)
         
-        global_max_length = compute_global_max_length(df_train=self.df_train, df_valid=self.df_valid, batch_size=batch_size)
+        path_valid_fold_embedding_file = self.opt.dataset["data"][self.dataset_name]["PATH_VALID_FOLD_EMBEDDING_FILE"]
+        if not os.path.exists(path_valid_fold_embedding_file):
+            self.opt.logger.info(f"Creating combined validation embeddings...")
+            
+            combined_embeddings = {}
+            for fold_idx, (_, df_valid_fold) in enumerate(self.kfolds):
+                fold_embeddings = self._generate_embeddings(
+                    df_valid_fold, None, global_max_length, batch_size, f"valid fold {fold_idx}"
+                )
+                combined_embeddings.update(fold_embeddings)
+                
+            torch.save(combined_embeddings, path_valid_fold_embedding_file)
+            self.opt.logger.info(f"Saved all validation embeddings to {path_valid_fold_embedding_file}")    
         
-        for split, df in zip(["train", "valid"], [self.df_train, self.df_valid]):
-            path_t5_embedding_file = self.config["data"][self.dataset_name][f"PATH_{split.upper()}_EMBEDDING_FILE"]
+        else:
+            self.opt.logger.info(f"Loaded existing validation embeddings from {path_valid_fold_embedding_file}")
             
-            if os.path.exists(path_t5_embedding_file):
-                self.embeddings = torch.load(path_t5_embedding_file, map_location=torch.device("cpu"), weights_only=False)
-                print(f"Loaded existing text embeddings from {path_t5_embedding_file}")
-                continue
+        path_sample_embedding_file = self.opt.dataset["data"][self.dataset_name]["PATH_TEST_EMBEDDING_FILE"]
+        if not os.path.exists(path_sample_embedding_file):
+            combined_embeddings = {}
             
-            text_embeds_dict = {}
-            unique_texts = df["prompt"].unique().tolist()    
+            for fold_idx in range(len(self.kfolds)):
+                path_valid_fold_embedding_file = self.opt.dataset["data"][self.dataset_name][f"PATH_VALID_FOLD_EMBEDDING_FILE"]
+                if os.path.exists(path_valid_fold_embedding_file):
+                    fold_embeddings = torch.load(path_valid_fold_embedding_file, map_location="cpu", weights_only=False)
+                    combined_embeddings.update(fold_embeddings)
                 
-            for i in tqdm(range(0, len(unique_texts), batch_size), desc=f"Generating {split} T5 embeddings"):
-                batch_texts = unique_texts[i : i + batch_size]
-                batch_embeddings, _ = t5_encode_text(text_list=batch_texts, max_length=global_max_length)
-                
-                for text, emb in zip(batch_texts, batch_embeddings):
-                    text_embeds_dict[text] = emb.cpu()
-                
-            torch.save(text_embeds_dict, f=path_t5_embedding_file, pickle_protocol=4)
-            print(f"Saved {split} text embeddings to {path_t5_embedding_file}")
+            path_valid_patient_embedding_file = self.opt.dataset["data"][self.dataset_name]["PATH_VALID_PATIENT_EMBEDDING_FILE"]
+            if os.path.exists(path_valid_patient_embedding_file):    
+                valid_patient_embeddings = torch.load(path_valid_patient_embedding_file, map_location="cpu", weights_only=False)
+                combined_embeddings.update(valid_patient_embeddings)
             
-    def get_datasets(self):
+            torch.save(combined_embeddings, path_sample_embedding_file)
+            self.opt.logger.info(f"Saved sample text embeddings to {path_sample_embedding_file}")
+            
+    def _generate_embeddings(self, df, path_file, global_max_length, batch_size, desc):
+        if path_file and os.path.exists(path_file):  
+            self.opt.logger.info(f"Loaded existing {desc} text embeddings from {path_file}")      
+            return torch.load(path_file, map_location="cpu", weights_only=False)
+
+        self.opt.logger.info(f"Creating text embeddings for {desc}...")
+        text_embeds_dict = {}
+
+        df = df.copy()
+        df["Study_Instance_Text"] = (
+            df["StudyInstanceUID"].astype(str) + "_" +
+            df["InstanceNumber"].astype(str)
+        )
+        unique_texts = df["Study_Instance_Text"].unique().tolist()
+        
+        for i in tqdm(range(0, len(unique_texts), batch_size), desc=f"Generating {desc} T5 embeddings"):
+            batch_texts = unique_texts[i : i + batch_size]
+            batch_embeddings, _ = t5_encode_text(
+                text_list=[t.split("_", 1)[1] for t in batch_texts], 
+                max_length=global_max_length
+            )
+            
+            for study_instance_text, emb in zip(batch_texts, batch_embeddings):
+                key = study_instance_text
+                text_embeds_dict[key] = emb.cpu()
+                self.opt.logger.debug(f"Saved embedding key: {key}") 
+        
+        if path_file:
+            torch.save(text_embeds_dict, path_file)
+            self.opt.logger.info(f"Saved {desc} text embeddings to {path_file}")
+            return None
+        
+        else:
+            return text_embeds_dict            
+                
+    def get_datasets(self, fold_idx=0):    
+        if fold_idx >= len(self.kfolds):
+            raise ValueError(f"fold_idx {fold_idx} exceeds folds count {len(self.kfolds)}")
+            
         train_transform = A.Compose(
             [
                 A.HorizontalFlip(p=0.2),
@@ -78,70 +152,41 @@ class VinDrMultiphase(BaseDataset):
             ]
         )
         
+        df_train_fold, df_valid_fold = self.kfolds[fold_idx]
+        
         train_ds = BaseDataset(
-            config=self.config,
+            opt=self.opt,
             dataset_name=self.dataset_name,
-            df=self.df_train,
+            df=df_train_fold,
             split="train",
             return_text=False,
             aug_transform=train_transform
         )
         
         valid_ds = BaseDataset(
-            config=self.config,
+            opt=self.opt,
             dataset_name=self.dataset_name,
-            df=self.df_valid,
-            split="valid",
+            df=df_valid_fold,
+            split=f"valid_fold",
             return_text=True
         )
         
         return train_ds, valid_ds
     
+    def get_valid_patient_ds(self):
+        return BaseDataset(
+            opt=self.opt,
+            dataset_name=self.dataset_name,
+            df=self.df_valid_patient,
+            split="valid_patient",
+            return_text=True
+        )    
+    
     def get_sample_ds(self):
-        sample_df = pd.concat([self.df_train, self.df_valid], ignore_index=True)
+        sample_df = pd.concat([df for _, df in self.kfolds] + [self.df_valid_patient], ignore_index=True)
         
-        print(f"Train size: {len(self.df_train)}")
-        print(f"Valid size: {len(self.df_valid)}")
-        print(f"Sample size (train + valid): {len(sample_df)}")
-
-        path_sample_embedding_file = self.config["data"][self.dataset_name]["PATH_TEST_EMBEDDING_FILE"]
-        
-        if os.path.exists(path_sample_embedding_file):
-            embeddings = torch.load(path_sample_embedding_file, map_location=torch.device("cpu"), weights_only=False)
-            
-            # missing_texts = [text for text in sample_df["prompt"].unique() if text not in embeddings] # DEBUG
-
-            # print(f"Total unique texts in sample_ds: {len(sample_df['prompt'].unique())}") # DEBUG
-            # print(f"Total embeddings available: {len(embeddings)}")  # DEBUG
-            # print(f"Missing text count: {len(missing_texts)}") # DEBUG
-
-            # if missing_texts:
-            #     print("Example missing texts:", missing_texts[:10]) # DEBUG
-
-            print(f"Loaded combined text embeddings from {path_sample_embedding_file}")
-            
-        else:
-            embeddings = {}
-
-            for split in ["train", "valid"]:
-                path_embedding_file = self.config["data"][self.dataset_name][f"PATH_{split.upper()}_EMBEDDING_FILE"]
-                
-                if os.path.exists(path_embedding_file):
-                    split_embeddings = torch.load(path_embedding_file, map_location=torch.device("cpu"), weights_only=False)
-                    
-                    for key, value in split_embeddings.items(): # DEBUG
-                        if key not in embeddings: # DEBUG
-                            # print(f"Warning: Duplicate key found: {key}") # DEBUG
-                            embeddings[key] = value # DEBUG
-                else: # DEBUG
-                    raise FileNotFoundError(f"Embedding file not found: {path_embedding_file}") # DEBUG
-
-            
-            torch.save(embeddings, path_sample_embedding_file)
-            print(f"Saved combined text embeddings to {path_sample_embedding_file}")
-            
         sample_ds = BaseDataset(
-            config=self.config,
+            opt=self.opt,
             dataset_name=self.dataset_name,
             df=sample_df,
             split="test",

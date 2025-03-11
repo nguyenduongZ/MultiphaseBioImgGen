@@ -1,16 +1,19 @@
 from .build_imagen import ImagenModel
 
-def get_imagen_model(config, device, testing=False):
-    config["model"]["model_type"] = "Imagen" 
-    
-    return ImagenModel(config=config, device=device, testing=testing)
+from utils import Opt
 
-def get_elucidated_imagen_model(config, device, testing=False):
-    config["model"]["model_type"] = "ElucidatedImagen" 
+def get_imagen_model(opt: Opt, device, testing=False):
+    opt.conductor["model"]["model_type"] = "Imagen"
     
-    return ImagenModel(config=config, device=device, testing=testing)
+    return ImagenModel(opt=opt, device=device, testing=testing)
 
-def get_model(config, model_type, device, testing=False):
+def get_elucidated_imagen_model(opt: Opt, device, testing=False):
+    opt.conductor["model"]["model_type"] = "ElucidatedImagen"
+    
+    return ImagenModel(opt=opt, device=device, testing=testing)
+
+def get_model(opt: Opt, device, testing=False):
+    model_type = opt.conductor["model"]["model_type"]
     model_mapping = {
         "Imagen": get_imagen_model,  
         "ElucidatedImagen": get_elucidated_imagen_model
@@ -19,4 +22,4 @@ def get_model(config, model_type, device, testing=False):
     if model_type not in model_mapping:
         raise ValueError(f"Model {model_type} is not supported. Choose 'Imagen' or 'ElucidatedImagen'.")
 
-    return model_mapping[model_type](config, device, testing)
+    return model_mapping[model_type](opt, device, testing)

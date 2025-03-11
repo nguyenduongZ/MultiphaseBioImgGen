@@ -16,7 +16,7 @@ from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
 from dataset import get_ds
 from model import get_model
-from utils import folder_setup, save_cfg, Logging
+from utils import folder_setup, save_config, Logging, Opt
 
 def save_image(images, text_batch: list, i: int, batch_size: int, unet_number: int, sample_folder: str):
     for j, image in enumerate(track(images)):
@@ -60,7 +60,7 @@ def gen_text(template: str, sample_quantity, patient_sex=None, patient_age=None,
     return text_list
 
 def text_2_image(
-    config, 
+    opt: Opt, 
     sample_dl, 
     model, 
     device: torch.device,
@@ -74,13 +74,13 @@ def text_2_image(
 ):
     now = f"{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}"
         
-    cond_scale = config["testing"]["cond_scale"]
-    sample_seed = config["seed"]
-    loss_weighting = config["testing"]["loss_weighting"]
-    ds = config["data"]["ds"]
-    model_type = config["model"]["model_type"]
-    lower_batch = config['testing']['lower_batch']
-    upper_batch = config['testing']['upper_batch']
+    cond_scale = opt.conductor["testing"]["cond_scale"]
+    sample_seed = opt.conductor["seed"]
+    loss_weighting = opt.conductor["testing"]["loss_weighting"]
+    ds = opt.dataset["data"]["ds"]
+    model_type = opt.conductor["model"]["model_type"]
+    lower_batch = opt.conductor['testing']['lower_batch']
+    upper_batch = opt.conductor['testing']['upper_batch']
     
     real_image_save_path = os.path.join(sample_folder, f"{ds}_{unet_number}_{model_type}/real_images/cond_scale_{cond_scale}_{loss_weighting}/{sample_seed:02d}")
     check_exists(real_image_save_path)
@@ -93,7 +93,7 @@ def text_2_image(
                 if i < lower_batch or i > upper_batch:
                     continue
                 
-                if i >= int(sample_quantity / config["trainer"]["batch_size"]):
+                if i >= int(sample_quantity / opt.conductor["trainer"]["batch_size"]):
                     break
                 
                 sample_image_bacth = model.trainer.sample(
@@ -134,20 +134,20 @@ def text_2_image(
                         i=i
                     )
         
-        if config["testing"]["FrechetInceptionDistance"]["usage"]:         
-            fid = FrechetInceptionDistance(**config["testing"]["FrechetInceptionDistance"]["params"])
+        if opt.conductor["testing"]["FrechetInceptionDistance"]["usage"]:         
+            fid = FrechetInceptionDistance(**opt.conductor["testing"]["FrechetInceptionDistance"]["params"])
             print("FID initialized")
             
-        if config["testing"]["KernelInceptionDistance"]["usage"]: 
-            kid = KernelInceptionDistance(**config["testing"]["KernelInceptionDistance"]["params"])
+        if opt.conductor["testing"]["KernelInceptionDistance"]["usage"]: 
+            kid = KernelInceptionDistance(**opt.conductor["testing"]["KernelInceptionDistance"]["params"])
             print("KID initialized")
         
-        if config["testing"]["LearnedPerceptualImagePatchSimilarity"]["usage"]:
-            lpips = LearnedPerceptualImagePatchSimilarity(**config["testing"]["LearnedPerceptualImagePatchSimilarity"]["params"])
+        if opt.conductor["testing"]["LearnedPerceptualImagePatchSimilarity"]["usage"]:
+            lpips = LearnedPerceptualImagePatchSimilarity(**opt.conductor["testing"]["LearnedPerceptualImagePatchSimilarity"]["params"])
             lpips_batch_score_list = []
             print("lpips initialized")
         
-        if config["testing"]["FrechetInceptionDistance"]["usage"] or config["testing"]["KernelInceptionDistance"]["usage"] or config["testing"]["LearnedPerceptualImagePatchSimilarity"]["usage"]:
+        if opt.conductor["testing"]["FrechetInceptionDistance"]["usage"] or opt.conductor["testing"]["KernelInceptionDistance"]["usage"] or opt.conductor["testing"]["LearnedPerceptualImagePatchSimilarity"]["usage"]:
             print(f"Start updating FID / KID")
             
             real_image_path_list = glob(real_image_save_path + "*_real_image_batch.pt")
@@ -158,23 +158,23 @@ def text_2_image(
                 sample_image_bacth = torch.load(sample_path).to(device)
                 
                 # Update FID
-                if config["testing"]["FrechetInceptionDistance"]["usage"]:
+                if opt.conductor["testing"]["FrechetInceptionDistance"]["usage"]:
                     fid.update(real_image_batch, real=True)
                     fid.update(sample_image_bacth, real=False)
                 
                 # Update KID
-                if config["testing"]["KernelInceptionDistance"]["usage"]:
+                if opt.conductor["testing"]["KernelInceptionDistance"]["usage"]:
                     kid.update(real_image_batch, real=True)
                     kid.update(sample_image_bacth, real=False)
                     
                 # Update lpips
-                if config["testing"]["LearnedPerceptualImagePatchSimilarity"]["usage"]:
+                if opt.conductor["testing"]["LearnedPerceptualImagePatchSimilarity"]["usage"]:
                     real_image_batch = rescale_tensor(real_image_batch)
                     sample_image_bacth = rescale_tensor(sample_image_bacth)
                     lpips_batch_score_list.append(lpips(real_image_batch, sample_image_bacth).tolist())
         
         # Compute FID
-        if config["testing"]["FrechetInceptionDistance"]["usage"]:
+        if opt.conductor["testing"]["FrechetInceptionDistance"]["usage"]:
             fid_result = fid.compute().cpu().item()
             print(f"fid_result: {fid_result}")
         
@@ -182,7 +182,7 @@ def text_2_image(
             fid_result = None
             
         # Compute KID
-        if config["testing"]["KernelInceptionDistance"]["usage"]:
+        if opt.conductor["testing"]["KernelInceptionDistance"]["usage"]:
             kid_mean, kid_std = kid.compute()
             kid_mean, kid_std = (kid_mean.cpu().item(), kid_std.cpu().item())
             print(f"kid_result: {kid_mean}, {kid_std}")
@@ -191,27 +191,27 @@ def text_2_image(
             kid_mean, kid_std = [None, None]
             
         #
-        if config["testing"]["CleanFID"]["usage"]:
+        if opt.conductor["testing"]["CleanFID"]["usage"]:
             fdir1 = os.path.join(real_image_save_path, "images")
             fdir2 = os.path.join(sample_image_save_path, "images")
-            clean_fid_score = clean_fid.compute_fid(fdir1=fdir1, fdir2=fdir2, **config["testing"]["CleanFID"]["params"])
+            clean_fid_score = clean_fid.compute_fid(fdir1=fdir1, fdir2=fdir2, **opt.conductor["testing"]["CleanFID"]["params"])
             print(f"clean_fid_score: {clean_fid_score}")
             
         else:
             clean_fid_score = None
             
         # FCD
-        if config["testing"]["FrechetCLIPDistance"]["usage"]:
+        if opt.conductor["testing"]["FrechetCLIPDistance"]["usage"]:
             fdir1 = os.path.join(real_image_save_path, "images")
             fdir2 = os.path.join(sample_image_save_path, "images")
-            fcd_score = clean_fid.compute_fid(fdir1=fdir1, fdir2=fdir2, **config["testing"]["FrechetCLIPDistance"]["params"])
+            fcd_score = clean_fid.compute_fid(fdir1=fdir1, fdir2=fdir2, **opt.conductor["testing"]["FrechetCLIPDistance"]["params"])
             print(f"clean_fid_score: {fcd_score}")
             
         else:
             fcd_score = None
             
         # LPIPS
-        if config["testing"]["LearnedPerceptualImagePatchSimilarity"]["usage"]:
+        if opt.conductor["testing"]["LearnedPerceptualImagePatchSimilarity"]["usage"]:
             lpips_mean = np.mean(lpips_batch_score_list)
             print(f"lpips_mean: {lpips_mean}")
             
@@ -242,7 +242,7 @@ def text_2_image(
         return results
 
     else:
-        batch_size = config['trainer']['batch_size']
+        batch_size = opt.conductor['trainer']['batch_size']
         
         for i in track(range(int(np.ceil(len(text_list) / 100)))):
             print(f'Iterator: {i}')
@@ -275,13 +275,13 @@ def text_2_image(
         
         return None
 
-def testing_imagen(config, args):
-    sample_quantity = config["testing"]["sample_quantity"]
-    save_samples = config["testing"]["save_samples"]
-    save_image_tensors = config["testing"]["save_image_tensors"]
+def testing_imagen(opt: Opt):   
+    sample_quantity = opt.conductor["testing"]["sample_quantity"]
+    save_samples = opt.conductor["testing"]["save_samples"]
+    save_image_tensors = opt.conductor["testing"]["save_image_tensors"]
     
-    if config["testing"]["text"] != "":
-        text = config["testing"]["text"]
+    if opt.conductor["testing"]["text"] != "":
+        text = opt.conductor["testing"]["text"]
         text_list=[text] * sample_quantity
     
     else: 
@@ -296,26 +296,25 @@ def testing_imagen(config, args):
         )
         
     # Data setup  
-    sample_data, config = get_ds(config=config, args=args, testing=True)
-    sample_ds, sample_dl = sample_data
+    sample_ds, sample_dl = get_ds(opt, testing=True)
     _, sample_text_embed, _ = sample_ds.__getitem__(idx=0)
     
     # Device setup
-    idx = config["trainer"]["idx"]
+    idx = opt.conductor["trainer"]["idx"]
     torch.cuda.set_device(idx)
     device = torch.device(f"cuda:{idx}" if torch.cuda.is_available() else "cpu")
     
     # Model setup
-    model_type = config["model"]["model_type"]
-    model = get_model(config=config, model_type=model_type, device=device, testing=True)
-    unet_number = config["testing"]["unet_number"]
+    model_type = opt.conductor["model"]["model_type"]
+    model = get_model(opt=opt, device=device, testing=True)
+    unet_number = opt.conductor["testing"]["unet_number"]
     
     # Folder setup and save setting
-    args.exp_dir = folder_setup(args)
-    save_cfg(args, args.exp_dir)
+    opt.args.exp_dir = folder_setup(opt)
+    save_config(opt, opt.args.exp_dir)
 
     results =  text_2_image(
-        config=config,
+        opt=opt,
         sample_dl=sample_dl,
         model=model,
         device=device,
@@ -323,7 +322,7 @@ def testing_imagen(config, args):
         sample_quantity=sample_quantity,
         save_samples=save_samples,
         save_image_tensors=save_image_tensors,
-        sample_folder=args.exp_dir,
+        sample_folder=opt.args.exp_dir,
         embed_shape=sample_text_embed.shape,
         text_list=text_list
     )

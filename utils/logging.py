@@ -1,148 +1,85 @@
 import os
 import time
 import yaml
-import torch
 import wandb
+import json
+import torch
 import numpy as np
 
 from torch.utils.tensorboard import SummaryWriter
 
+from .build_opt import Opt
+
 class Logging:
-    def __init__(self, args):
-        self.__log = {}
+    def __init__(self, opt: Opt):
+        self.__opt = opt
+        self.__args = opt.args
+        self.__log =  {}
         self.__epoch = 0
+        self.__run = None
+        self.__writer = None
         
-        if args.wandb:
-            with open(args.config, "r") as f:
-                config = yaml.safe_load(f)
-            
-            args.run_name = f"{args.ds}_u{args.unet_number}_{args.model_type}_{args.cond_scale}__{int(time.time())}"
-            
+        if self.__args.wandb:
+            self.__args.run_name = f"{self.__args.ds}_{self.__args.model_type}_unet{self.__args.unet_number}_condscale{self.__args.cond_scale}__{int(time.time())}"
             self.__run = wandb.init(
-                project=args.wandb_prj,
-                entity=args.wandb_entity,
-                name=args.run_name,
-                config=config,
+                project=self.__args.wandb_prj,
+                # entity=self.__args.wandb_entity,
+                name=self.__args.run_name,
+                config=self.__args,
                 force=True
             )
             
-        if args.log:
-            self.__writer = SummaryWriter(args.exp_dir)
+            self.__run.define_metric("*", step_metric="global_step", step_sync=True)
+            
+        if self.__args.log:
+            self.__writer = SummaryWriter(self.__args.exp_dir)
             self.__writer.add_text(
                 "hyperparameters",
-                "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in config.items()])),
+                "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(self.__args).items()])),
             )
             
-        self.__args = args
-        
-    def __call__(self, key, value):
-        if key in self.__log:
-            self.__log[key] += value
-        
-        else:
-            self.__log[key] = value
-            
-    def __update_wandb(self):
-        for log_key in self.__log_avg:
-            self.__run.log({log_key: self.__log_avg[log_key]}, step=self.__epoch)
-    
-    def __update_board(self):
-        for log_key in self.__log_avg:
-            self.__writer.add_scalar(log_key, self.__log_avg[log_key], self.__epoch)
-    
-    def __reset_epoch(self):
-        self.__log = {}
-        
-    def reset(self):
-        self.__reset_epoch()
-        self.__epoch = 0
-        
-    def step(self, epoch):
-        self.__epoch = epoch
-        
-        self.__log_avg = {}
-        for log_key in self.__log:
-            if log_key.split("/")[-1] in ["loss", "FID", "KID_mean", "KID_std", "Clean_FID", "FCD", "LPIPS"]:
-                if "train" in log_key:
-                    self.__log_avg[log_key] = self.__log[log_key] / self.__args.num_train_batch
-                    
-                elif "valid" in log_key:
-                    self.__log_avg[log_key] = self.__log[log_key] / self.__args.num_valid_batch
+    def __call__(self, key, value, step=None, metadata=None):
+        if step is not None:
+            step = max(self.__epoch, step)  
+            self.__epoch = step 
 
-                elif "test" in log_key:
-                    self.__log_avg[log_key] = self.__log[log_key] / self.__args.num_batch
-                    
-                else:
-                    raise ValueError(f"key: {log_key} wrong format")
-                
-            else:
-                if "train" in log_key:
-                    self.__log_avg[log_key] = self.__log[log_key] / self.__args.num_train_sample
-                    
-                elif "valid" in log_key:
-                    self.__log_avg[log_key] = self.__log[log_key] / self.__args.num_valid_sample
-                    
-                elif "test" in log_key:
-                    self.__log_avg[log_key] = self.__log[log_key] / self.__args.num_sample
-                
-                else:
-                    raise ValueError(f"key: {log_key} wrong format")
+        log_data = {key: value}
+        if metadata:
+            log_data.update(metadata)
+
+        if self.__run:
+            log_data["global_step"] = self.__epoch 
+            self.__run.log(log_data, step=self.__epoch, commit=False)
+
+        if self.__writer:
+            self.__writer.add_scalar(key, value, global_step=self.__epoch)
+            
+    def log_iteration(self, iteration):
+        self.__epoch = max(self.__epoch, iteration) 
+        if self.__run:
+            self.__run.log({"global_step": self.__epoch}, step=self.__epoch, commit=True)
         
-        if not (epoch % self.__args.valid_loss):                    
-            if self.__args.wandb:
-                self.__update_wandb()
-                
-            if self.__args.log:
-                self.__update_board()
-            
-        self.__reset_epoch()
-            
     def watch(self, model):
-        self.__run.watch(models=model, log="all", log_freq=self.__args.num_train_batch, log_graph=True)
+        if self.__run:
+            self.__run.watch(models=model, log="all", log_freq=self.__args.num_train_batch, log_graph=True) 
+            
+    def log_images(self, images_dict, iteration):
+        if not self.__run:
+            return
         
-        
-    def log_model(self):
-        best_path = os.path.join(self.__args.exp_dir,  "best.pt")
-        if os.path.exists(best_path):
-            self.__run.log_model(path=best_path, model_name=f"{self.__args.run_name}-best-model")
-        
-        last_path = os.path.join(self.__args.exp_dir,  "last.pt")
-        if os.path.exists(last_path):
-            self.__run.log_model(path=last_path, model_name=f"{self.__args.run_name}-last-model")
+        iteration = max(self.__epoch, iteration) 
+        log_dict = {"global_step": iteration}
 
-    def log_images(self, table_data, epoch, validate_model):
-        columns = ["Cond Scale", "Prompt", "Original Image"] + [
-            f"Generated Image (Epoch {e})" for e in range(validate_model, epoch + 1, validate_model)
-        ]
+        for prompt, data in images_dict.items():
+            generated_image = data.get("Generated Image", None)
+            if generated_image is not None:
+                log_dict[f"Generated/{prompt}"] = wandb.Image(generated_image, caption=f"Step {iteration}")
+
+        self.__run.log(log_dict, step=iteration)         
         
-        table = wandb.Table(columns=columns)
-        
-        for prompt, data in table_data.items():
-            row = [data["Cond Scale"], data["Prompt"], data["Original Image"]]      
-            for col in columns[3:]:
-                row.append(data.get(col, None))
-            table.add_data(*row)
-            
-        self.__run.log({"Generated Samples": table})
-            
     def close(self):
-        if self.__writer is not None:
-            self.__writer.close()
-        if self.__run is not None:
-            self.__run.finish()
-
-    @property
-    def log(self):
-        return self._Logging__log
-    
-    @property
-    def log_avg(self):
-        return self._Logging__log_avg
-    
-    @property
-    def epoch(self):
-        return self._Logging__epoch
-    
-    @property
-    def args(self):
-        return self._Logging_args
+        if self.__run:
+            self.__run.finish() 
+            
+        if self.__run:
+            self.__writer.close() 

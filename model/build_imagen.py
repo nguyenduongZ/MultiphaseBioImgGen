@@ -2,74 +2,86 @@ import os, sys
 import torch
 
 from glob import glob
+from accelerate import Accelerator
 from imagen_pytorch import Unet, ImagenTrainer, ImagenConfig, ElucidatedImagenConfig, load_imagen_from_checkpoint
-from utils import check_text_encoder, model_starter
+
+from utils import Opt, check_text_encoder, model_starter
 
 class ImagenModel():
-    def __init__(self, config, device: torch.device, testing=False):
-        model_type = config["model"]["model_type"]
-        assert model_type == "Imagen" or model_type == "ElucidatedImagen"
-        
-        if model_type == "Imagen":
-            self.is_elucidated = False
-            
-        elif model_type == "ElucidatedImagen":
-            self.is_elucidated = True
-        
-        self.config = config
-        self.device = device    
+    def __init__(self, opt: Opt, device: torch.device, testing=False):
+        self.opt = opt
         self.testing = testing
         
-        self.unet1, self.unet2 = self._set_unets_(elucidated=self.is_elucidated)
+        self.is_elucidated = (opt.conductor["model"]["model_type"] == "ElucidatedImagen")
+            
+        self.accelerator = Accelerator(mixed_precision="fp16") if opt.conductor["trainer"]["multi_gpu"] else None
+        self.device = self.accelerator.device if self.accelerator else device
+        
+        # Initialize Unet1 & Unet2
+        self.unet1, self.unet2 = self._set_unets_()
+        
+        # Initialize Imagen Model
         self._set_imagen_()
+        
+        # Initialize Imagen Trainer
         self._set_trainer_()
-    
-    def _set_unets_(self, elucidated: bool):
-        self.model_key = "ElucidatedImagen" if elucidated else "Imagen"
-
-        self.unet1 = Unet(**self.config["model"][self.model_key]["unets"]["unet1"])
-        self.unet2 = Unet(**self.config["model"][self.model_key]["unets"]["unet2"])
         
-        return self.unet1, self.unet2
-    
-    @model_starter
-    @check_text_encoder
-    def _set_imagen_(self):
-        path_model_load = self.config["trainer"]["PATH_MODEL_LOAD"]
-        
-        if self.testing:
-            test_model_save = self.config["testing"]["PATH_MODEL_TESTING"]
-            self.imagen_model = load_imagen_from_checkpoint(test_model_save)
-        
-        elif (self.config["trainer"]["use_existing_model"] and len(glob(path_model_load)) > 0):
-            self.imagen_model = load_imagen_from_checkpoint(path_model_load)
+    def _set_unets_(self):
+        if self.is_elucidated:
+            unet1 = Unet(**self.opt.elucidated_imagen["unet1"])
+            unet2 = Unet(**self.opt.elucidated_imagen["unet2"])
             
         else:
-            if self.is_elucidated:
-                self.imagen_model = ElucidatedImagenConfig(
-                    unets=[
-                        dict(**self.config["model"][self.model_key]["unets"]["unet1"]), 
-                        dict(**self.config["model"][self.model_key]["unets"]["unet2"])],
-                    **self.config["model"][self.model_key]["elucidated_imagen"]
-                ).create()
-                
-            else:
-                self.imagen_model = ImagenConfig(
-                    unets=[
-                        dict(**self.config["model"][self.model_key]["unets"]["unet1"]), 
-                        dict(**self.config["model"][self.model_key]["unets"]["unet2"])],
-                    **self.config["model"][self.model_key]["imagen"]
-                ).create()
+            unet1 = Unet(**self.opt.imagen["unet1"])
+            unet2 = Unet(**self.opt.imagen["unet2"])           
+        
+        return unet1, unet2
+    
+    def _load_checkpoint(self):
+        opt = self.opt
+        path_model_load = opt.conductor["trainer"]["PATH_MODEL_LOAD"]
+
+        if self.testing:
+            test_model_save = opt.conductor["testing"]["PATH_MODEL_TESTING"]
+            return load_imagen_from_checkpoint(test_model_save)        
+        
+        elif (opt.conductor["trainer"]["use_existing_model"] and glob(path_model_load)):
+            return load_imagen_from_checkpoint(path_model_load)
             
-        if not self.config["trainer"]["multi_gpu"]:
-            self.imagen_model = self.imagen_model.to(self.device)
+        return None
+    
+    @check_text_encoder
+    @model_starter
+    def _set_imagen_(self):
+        imagen_checkpoint = self._load_checkpoint()
+        
+        if imagen_checkpoint:
+            self.imagen_model = imagen_checkpoint
+            
+        else:
+            config = self.opt.elucidated_imagen if self.is_elucidated else self.opt.imagen
+            imagen_class = ElucidatedImagenConfig if self.is_elucidated else ImagenConfig
+
+            self.imagen_model = imagen_class(
+                unets=[
+                    dict(**config["unet1"]), dict(**config["unet2"])
+                ],
+                **config["elucidated_imagen"] if self.is_elucidated else config["imagen"]
+            ).create()
+            
+        self.imagen_model = self.imagen_model.to(self.device)
             
     def _set_trainer_(self):
+        opt = self.opt
+        
         self.trainer = ImagenTrainer(
             imagen=self.imagen_model,
-            split_valid_from_train=self.config["trainer"]["split_valid_from_train"],
-            dl_tuple_output_keywords_names=self.config["trainer"]["dl_tuple_output_keywords_names"]
+            split_valid_from_train=opt.conductor["trainer"]["split_valid_from_train"],
+            dl_tuple_output_keywords_names=opt.conductor["trainer"]["dl_tuple_output_keywords_names"]
         )
+
+        if self.accelerator:
+            self.trainer, self.imagen_model = self.accelerator.prepare(self.trainer, self.imagen_model)
         
-        if not self.config["trainer"]["multi_gpu"]:
+        else:    
             self.trainer = self.trainer.to(self.device)
