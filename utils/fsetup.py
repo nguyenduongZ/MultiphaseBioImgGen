@@ -33,16 +33,17 @@ def folder_setup(opt: Opt):
     
     exp_dir = os.path.join(task_dir, f"exp_{exp_cnt}")
     
-    if exp_indices:
-        last_exp_dir = os.path.join(task_dir, f"exp_{max(exp_indices)}")
-        cfg_path = os.path.join(last_exp_dir, "config.json")
-        
-        if os.path.exists(cfg_path):
-            with open(cfg_path, "r") as f:
-                data = json.load(f)
-            if data.get("test", False):
-                shutil.rmtree(last_exp_dir)
-                exp_dir = last_exp_dir    
+    if args.test:
+        if exp_indices:
+            last_exp_dir = os.path.join(task_dir, f"exp_{max(exp_indices)}")
+            cfg_path = os.path.join(last_exp_dir, "config.json")
+            
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r") as f:
+                    data = json.load(f)
+                if data.get("test", False):
+                    shutil.rmtree(last_exp_dir)
+                    exp_dir = last_exp_dir 
                 
     os.makedirs(exp_dir, exist_ok=True)
     

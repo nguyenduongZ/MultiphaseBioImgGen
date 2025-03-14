@@ -19,13 +19,13 @@ if __name__ == "__main__":
     # Training parameters
     parser.add_argument("--mode", type=str, required=True, choices=["training", "testing"],
                         help="Pipeline traning or testing.")
-    parser.add_argument("--batch_size", type=int, default=16, 
+    parser.add_argument("--batch_size", type=int, default=None, 
                         help="Batch size used for dataset.")
     parser.add_argument("--pin_memory", action="store_true", 
                         help="Toggle to pin memory in dataloader.")
-    parser.add_argument("--num_workers", type=int, default=-1, 
+    parser.add_argument("--num_workers", type=int, default=None, 
                         help="Number of worker processor.")
-    parser.add_argument("--idx", type=int, default=-1, 
+    parser.add_argument("--idx", type=int, default=None, 
                         help="Device index used in training.")
     parser.add_argument("--multi_gpu", action="store_true", 
                         help="Multi GPU.")
@@ -33,7 +33,7 @@ if __name__ == "__main__":
                         help="Seed used in training.")
     parser.add_argument("--unet_number", type=int, required=True, choices=[1, 2], 
                         help="Traning at unet number.")
-    parser.add_argument('--iterations', type=int, default=-1, 
+    parser.add_argument('--iterations', type=int, default=None, 
                         help='number of epochs used in training')
 
     # Test code 
@@ -41,11 +41,13 @@ if __name__ == "__main__":
                         help='toggle to say that this experiment is just flow testing')
     
     # Testing
-    parser.add_argument("--validate_model", type=int, default=-1, 
+    parser.add_argument("--validate_model", type=int, default=None, 
                         help="validate_model")
-    parser.add_argument("--cond_scale", type=int, default=-1, choices=range(1, 11), 
-                        help="cond_scale")
-    parser.add_argument("--valid_loss", type=int, default=-1, 
+    parser.add_argument("--cond_scale_validation", type=int, default=None, 
+                        help="cond_scale_valid")
+    parser.add_argument("--cond_scale_testing", type=int, default=None,
+                        help="cond_scale_valid")
+    parser.add_argument("--valid_loss", type=int, default=None, 
                         help="valid_loss")
     
     # LOGGING

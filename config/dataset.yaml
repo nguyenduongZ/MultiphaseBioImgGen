@@ -3,24 +3,26 @@ data:
   
   # 
   VinDrMultiphase:
-    PATH_DICOM_DIR: "/media/mountHDD1/quby/asset/data/vindr_multiphase/abdomen_phases"
-    PATH_METADATA_PROMPT_FILE: "/media/mountHDD1/quby/asset/data/vindr_multiphase/metadata_prompt.csv"
+    PATH_DICOM_DIR: "/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/abdomen_phases"
+    PATH_METADATA_PROMPT_FILE: "/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/metadata_prompt.csv"
+      
+    PATH_TRAIN_EMBEDDING_FILE: "/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/train_t5_embedding.pt"
+    PATH_VALID_EMBEDDING_FILE: "/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/valid_fold_t5_embedding.pt" # For training
+    # PATH_VALID_PATIENT_EMBEDDING_FILE: "/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/valid_patient_t5_embedding.pt" # For sample generation
+    PATH_TEST_EMBEDDING_FILE: "/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/sample_t5_embedding.pt" # For testing
     
-    PATH_TRAIN_EMBEDDING_FILE: "/media/mountHDD1/quby/asset/data/vindr_multiphase/train_t5_embedding.pt"
-    PATH_VALID_FOLD_EMBEDDING_FILE: "/media/mountHDD1/quby/asset/data/vindr_multiphase/valid_fold_t5_embedding.pt" # For training
-    PATH_VALID_PATIENT_EMBEDDING_FILE: "/media/mountHDD1/quby/asset/data/vindr_multiphase/valid_patient_t5_embedding.pt" # For sample generation
-    PATH_TEST_EMBEDDING_FILE: "/media/mountHDD1/quby/asset/data/vindr_multiphase/sample_t5_embedding.pt" # For testing
-    
+    preprocessing:  
+      window_center: 50
+      window_width: 400
+      valid_size: 0.2
 
-    window_center: 50
-    window_width: 400
-    valid_size: 0.2
-    image_size: 256
-    k_folds: 5
+    augmentation:
+      image_size: 256
+
 
     classes:
       Non-contrast: Non-contrast
       Aterial: Aterial
       Venous: Venous
-      
+        
   # Add data here

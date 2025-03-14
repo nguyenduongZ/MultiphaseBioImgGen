@@ -44,14 +44,14 @@ class BaseDataset(Dataset):
         self.df = df
         self.return_text = return_text
         self.aug_transform = aug_transform
-        self.image_size = opt.dataset["data"][self.dataset_name]["image_size"]
+        self.image_size = opt.config["data"][self.dataset_name]["augmentation"]["image_size"]
         
         super().__init__(
-            folder=opt.dataset["data"][self.dataset_name]["PATH_DICOM_DIR"],
+            folder=opt.config["data"][self.dataset_name]["PATH_DICOM_DIR"],
             image_size=self.image_size
         )
         
-        self.path_embedding_file = opt.dataset["data"][self.dataset_name][f"PATH_{split.upper()}_EMBEDDING_FILE"]
+        self.path_embedding_file = opt.config["data"][self.dataset_name][f"PATH_{split.upper()}_EMBEDDING_FILE"]
         self.embeddings = self._load_embeddings_()
         
     def _load_embeddings_(self):
@@ -83,8 +83,8 @@ class BaseDataset(Dataset):
             
             hu_image = convert_pixel_to_hu(dcm)
 
-            window_center = self.opt.dataset["data"][self.dataset_name]["window_center"]
-            window_width = self.opt.dataset["data"][self.dataset_name]["window_width"]
+            window_center = self.opt.config["data"][self.dataset_name]["preprocessing"]["window_center"]
+            window_width = self.opt.config["data"][self.dataset_name]["preprocessing"]["window_width"]
 
             return apply_window(hu_image, window_center, window_width)
 
@@ -101,12 +101,9 @@ class BaseDataset(Dataset):
         
         # Text embedding
         text = row["prompt"]
-        instance_num = str(row["InstanceNumber"])
-        key = f"{str(study_id)}_{instance_num}"
-        
-        if key not in self.embeddings:
-            raise KeyError(f"Embedding not found for key: {key}")
-        text_embedding = self.embeddings[key]
+        if text not in self.embeddings:
+            raise KeyError(f"Embedding not found for text: {text}")
+        text_embedding = self.embeddings[text]
 
         if self.return_text:
             return image, text_embedding, text

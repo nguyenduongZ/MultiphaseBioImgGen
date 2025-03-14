@@ -13,18 +13,16 @@ trainer:
   use_existing_model: False
 
   split_valid_from_train: False
-  dl_tuple_output_keywords_names:
-    - images
-    - text_embeds
+  dl_tuple_output_keywords_names: [images, text_embeds]
 
   ### DataLoader:
-  batch_size: 16
+  batch_size: 8
   num_workers: 8
   pin_memory: True
 
   ## Training
   idx: 0
-  iterations: 400000
+  iterations: 100000
   unet_number: 1
 
   PATH_MODEL_CHECKPOINT: ./asset/results/training/VinDrMultiphase_Imagen_unet1/exp_0/model/fold1_checkpoint.pt
@@ -37,11 +35,11 @@ validation:
   display_sample: True
   
   interval:
-    valid_loss: 40
-    validate_model: 4000
+    valid_loss: 50
+    validate_model: 5000
 
   sample_quantity: 1
-  cond_scale: 5
+  cond_scale_validation: 7
 
 ### Testing
 testing:
@@ -51,7 +49,7 @@ testing:
   sample_quantity: 10000
   save_samples: True
   save_image_tensors: True
-  cond_scale: 5 # 1 to 10
+  cond_scale_testing: 5 # 1 to 10
   loss_weighting: p2
   text:
   phase:

@@ -6,8 +6,8 @@ from .build_opt import Opt
 class EarlyStopping:
     def __init__(self, opt: Opt):
         self.opt = opt
-        self.patience = opt.conductor["early_stopping"]["patience"]
-        self.min_delta = opt.conductor["early_stopping"]["min_delta"]
+        self.patience = opt.config["early_stopping"]["patience"]
+        self.min_delta = opt.config["early_stopping"]["min_delta"]
         self.counter = 0
         self.best_loss = float('inf')
         
@@ -25,17 +25,17 @@ class EarlyStopping:
         
         return False
     
-def plot_learning_curve(train_losses, valid_losses, fold):
+def plot_learning_curve(train_losses, valid_losses):
     plt.figure(figsize=(10, 5))
     plt.plot(train_losses, label='Train Loss', color='blue')
     plt.plot(valid_losses, label='Validation Loss', color='red')
     plt.xlabel("Iterations")
     plt.ylabel("Loss")
-    plt.title(f"Learning Curve for Fold {fold}")
+    plt.title(f"Learning Curve")
     plt.legend()
     plt.grid()
     
-    save_path = f"learning_curve_fold_{fold}.png"
+    save_path = f"learning_curve.png"
     plt.savefig(save_path)
     print(f"Learning Curve saved at {save_path}")
     plt.show()
