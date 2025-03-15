@@ -1,5 +1,4 @@
-import os, sys
-import yaml
+import os
 import pathlib
 import logging
 import logging.config
@@ -51,16 +50,19 @@ def update_config_recursively(config, updates, parent_key=""):
     for key, value in updates.items():
         full_key = f"{parent_key}.{key}" if parent_key else key
 
-        if isinstance(value, dict) and key in config:
-            update_config_recursively(config[key], value, full_key)
+        if OmegaConf.select(config, full_key) is not None:
+            OmegaConf.update(config, full_key, value, merge=True)
+            print(f"Updated {full_key}: {value}")  
         else:
-            if key not in config:
-                print(f"Adding new key {full_key}: {value}")  
-            config[key] = value
+            if hasattr(config, "trainer") and key in config.trainer:
+                OmegaConf.update(config.trainer, key, value, merge=True)
+                print(f"Updated trainer.{key}: {value}")
+            else:
+                OmegaConf.update(config, key, value, merge=True)
+                print(f"Added new key {key}: {value}")
 
 class Opt:
     def __init__(self, project_name="MultiphaseBioImgGen", args=None):
-        #
         self.project_root = get_project_root(project_name=project_name)
         
         #
@@ -69,7 +71,7 @@ class Opt:
         self.logger.setLevel(logging.DEBUG)
         self.logger.debug(f"Logger started")
         
-        # 
+        # Load YAML
         config_paths = [
             os.path.join(self.project_root, "config", "model", "imagen.yaml"),
             os.path.join(self.project_root, "config", "model", "elucidated_imagen.yaml"),
@@ -78,14 +80,15 @@ class Opt:
         ]
         
         configs = [OmegaConf.load(path) for path in config_paths]
-        self.config = OmegaConf.merge(*configs)
+        self.config = OmegaConf.merge(*configs)  # Merge YAML
         self.logger.debug(f"All configs loaded and merged")
-        
+
+        # Override args
         if args:
             args_dict = {k: v for k, v in vars(args).items() if v is not None}
             
             update_config_recursively(self.config, args_dict)
-                
-            self.logger.debug("Config successfully overwritten with args!")  
-            
+
+            self.logger.debug(f"Config updated with args: {args_dict}")
+        
         self.args = args  
