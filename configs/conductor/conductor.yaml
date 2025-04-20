@@ -1,0 +1,103 @@
+mode: training
+
+unet_number: 1
+cond_scale: 2 # 1 to 10 for training or testing
+sample_quantity: 10
+seed: 42
+
+### Trainer
+trainer:
+  ## DataLoader:
+  batch_size: 16
+  num_workers: 4
+  pin_memory: True
+  shuffle: True
+
+  ## Training
+  idx: 0
+  iterations: 100000
+  
+  early_stopping:
+    patience: 100000
+    min_delta: 1e-4
+
+  split_valid_from_train: False
+  dl_tuple_output_keywords_names: [images, text_embeds]
+
+  PATH_MODEL_CHECKPOINT: ./results/training/VinDrMultiphase_Imagen/unet1/cond_scale_2/checkpoints/fold1_checkpoint-final.pt
+  PATH_MODEL_LOAD: ./results/training/VinDrMultiphase_Imagen/unet1/cond_scale_2/checkpoints/fold1_checkpoint-final.pt
+  PATH_MODEL_SAVE: ./results/training/VinDrMultiphase_Imagen_unet2/cond_scale_2/model/fold1_checkpoint.pt
+
+### Validation
+validation:
+  display_samples: True
+  max_checkpoints: 5
+    
+  interval:
+    valid_loss: 50
+    validate_model: 20000
+
+### Testing
+testing:
+  PATH_MODEL_TESTING: /media/mountHDD1/users/duong/git/GenPhaseX/exp_6/model/Imagen_unet2.pt
+
+  save_samples: True
+  save_image_tensors: True
+  loss_weighting: p2
+  # text:
+  # phase:
+
+  # Define Batch Boundaries to parallize sampling
+  lower_batch: 0
+  upper_batch: 100
+  
+  # Frechet Inception Distance
+  FrechetInceptionDistance:
+    usage: True
+    params:
+      feature: 2048
+      reset_real_features: True
+      normalize: True
+
+  # Kernel Inception Distance
+  KernelInceptionDistance:
+    usage: True
+    params:
+      feature: 2048
+      subsets: 50
+      subset_size: 100
+      reset_real_features: True
+      normalize: True
+
+  # Clean Fréchet Inception Distance
+  CleanFID:
+    usage: True
+    params:
+      mode: clean
+      model_name: inception_v3
+      num_workers: 4
+      batch_size: 32 
+
+  # Fréchet CLIP Distance
+  FrechetCLIPDistance:
+    usage: True
+    params:
+      mode: clean
+      model_name: clip_vit_b_32
+      num_workers: 4
+      batch_size: 32 
+
+  #
+  LearnedPerceptualImagePatchSimilarity:
+    usage: False
+    params:
+      net_type: vgg
+
+  # CMMD
+  CMDD:
+    usage: True
+    params:
+      model_name: openai/clip-vit-large-patch14-336
+      subsets: 50
+      subset_size: 100
+      normalize: True

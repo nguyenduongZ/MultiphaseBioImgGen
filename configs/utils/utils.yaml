@@ -1,0 +1,12 @@
+name: MasterLogger
+level: INFO
+
+wandb:
+  usage: False
+  run_name: 
+  wandb_prj: MultiphaseBioImgGen
+  entity: scalemind
+
+log:
+  usage: False
+  exp_dir: 
