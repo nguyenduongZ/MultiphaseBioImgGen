@@ -100,7 +100,13 @@ class CMMDMetric:
         cmmd_std = np.std(mmd_values) if len(mmd_values) > 1 else 0.0
         return cmmd_mean, cmmd_std
     
-def compute_cmmd(cfg, logger: logging.Logger, real_image_save_path, sample_image_save_path, device):
+def compute_cmmd(
+    cfg, 
+    real_image_save_path: str, 
+    sample_image_save_path: str,
+    device: torch.device,
+    logger: logging.Logger,
+):
     if not cfg.conductor["testing"]["CMMD"]["usage"]:
         logger.info("CMMD not enabled, skipping.")
         return None, None

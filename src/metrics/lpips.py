@@ -13,7 +13,14 @@ from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 def rescale_tensor(x):
     return 2 * (x - torch.min(x)) / (torch.max(x) - torch.min(x)) - 1
 
-def compute_lpips(cfg, logger: logging.Logger, real_image_save_path, sample_image_save_path, device, timestamp):
+def compute_lpips(
+    cfg, 
+    real_image_save_path: str, 
+    sample_image_save_path: str,
+    device: torch.device,
+    logger: logging.Logger, 
+    timestamp
+):
     if not cfg.conductor["testing"]["LearnedPerceptualImagePatchSimilarity"]["usage"]:
         return None
     

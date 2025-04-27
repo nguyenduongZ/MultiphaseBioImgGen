@@ -1,9 +1,10 @@
 mode: training
 
 unet_number: 1
-cond_scale: 2 # 1 to 10 for training or testing
+cond_scale: 3 # 1 to 10 for training or testing
 sample_quantity: 10
 seed: 42
+lr: 1e-4
 
 ### Trainer
 trainer:
@@ -16,6 +17,7 @@ trainer:
   ## Training
   idx: 0
   iterations: 100000
+  epochs: 100
   
   early_stopping:
     patience: 100000

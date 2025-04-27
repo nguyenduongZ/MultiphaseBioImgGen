@@ -2,10 +2,22 @@ name: vindr_multiphase
 PATH_DICOM_DIR: ././data/vindr_multiphase/abdomen_phases
 PATH_METADATA_PROMPT_FILE: ./data/vindr_multiphase/metadata_prompt.csv
 
+text_encoder_name: t5
+
 t5_embeddings:
   train: ./data/vindr_multiphase/t5_embeddings/train.pt
   valid: ./data/vindr_multiphase/t5_embeddings/valid.pt
   test: ./data/vindr_multiphase/t5_embeddings/test.pt
+
+clip_embeddings:
+  train: ./data/vindr_multiphase/clip_embeddings/train.pt
+  valid: ./data/vindr_multiphase/clip_embeddings/valid.pt
+  test: ./data/vindr_multiphase/clip_embeddings/test.pt
+
+biobert_embeddings:
+  train: ./data/vindr_multiphase/biobert_embeddings/train.pt
+  valid: ./data/vindr_multiphase/biobert_embeddings/valid.pt
+  test: ./data/vindr_multiphase/biobert_embeddings/test.pt
 
 preprocessing:  
   window_center: 40

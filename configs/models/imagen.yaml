@@ -3,7 +3,7 @@ is_elucidated: False
 
 # Text Embedding
 text_embed_dim: 768                     # T5: 768
-text_encoder_name: google/t5-v1_1-base  # T5: google/t5-v1_1-base | OHE: ohe_encoder
+text_encoder_name: google/t5-v1_1-base  # T5: google/t5-v1_1-base 
 
 ## Architecture
 # U-Net 1

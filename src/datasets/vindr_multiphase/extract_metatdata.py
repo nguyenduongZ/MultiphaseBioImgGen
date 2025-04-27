@@ -2,6 +2,7 @@ import os, sys
 sys.path.append(os.path.abspath(os.curdir))
 
 import csv
+import logging
 import pandas as pd
 
 from tqdm import tqdm
@@ -12,12 +13,23 @@ from concurrent.futures import ProcessPoolExecutor
 
 from src.utils import MasterLogger
 
-FIELDS = [
-    "image_path", "StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID", "PatientSex",
-    "PatientAge", "PatientWeight", "BodyPartExamined", "Modality", "ScanOptions",
-    "InstanceNumber", "SliceLocation", "ContrastBolusAgent", "ContrastBolusStartTime",
-    "ImageOrientationPatient", "PixelSpacing", "SliceThickness"
+DICOM_FIELDS = [
+    # Study/Series identifiers
+    "StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID",
+    
+    # Patient info
+    "PatientSex", "PatientAge", "PatientWeight", "PatientPosition",
+    
+    # Scan details
+    "Modality", "BodyPartExamined", "ScanOptions", "ContrastBolusAgent", "ContrastBolusStartTime",
+    
+    # Image acquisition info
+    "InstanceNumber", "SliceLocation", "PixelSpacing", "SliceThickness", "ImageOrientationPatient"
 ]
+
+ADDITIONAL_FIELDS = ["image_path", "z_position"]
+
+FIELDS = ADDITIONAL_FIELDS + DICOM_FIELDS
 
 def extract_metadata(dcm_file, project_root, logger):
     try:
@@ -25,9 +37,14 @@ def extract_metadata(dcm_file, project_root, logger):
 
         image_path = "./" + os.path.relpath(dcm_file, project_root)
         
-        metadata = {field: getattr(dataset, field, None) for field in FIELDS if field != "image_path"}
+        metadata = {field: getattr(dataset, field, None) for field in DICOM_FIELDS}
         metadata["image_path"] = image_path
         
+        if hasattr(dataset, "ImagePositionPatient") and len(dataset.ImagePositionPatient) == 3:
+            metadata["z_position"] = dataset.ImagePositionPatient[2]
+        else:
+            metadata["z_position"] = None
+            
         return metadata
     
     except Exception as e:
@@ -69,14 +86,8 @@ def main():
     dcm_dir = os.path.join(_root, "abdomen_phases")
     output_csv = os.path.join(_root, "metadata.csv")
 
-    logger_config = {
-        "cfg_file": os.path.join(project_root, "configs/utils/logger.conf"),
-        "name": "EXTRACT METADATA",
-        "level": "INFO"
-    }
-    
-    master_logger = MasterLogger(DictConfig(logger_config))
-    logger = master_logger.get_logger()
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("EXTRACT METADATA")
     logger.info("Starting DICOM metadata extraction")
 
     if not os.path.exists(dcm_dir):

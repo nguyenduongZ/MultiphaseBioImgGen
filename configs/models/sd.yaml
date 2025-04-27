@@ -1,0 +1,8 @@
+name: sd
+pretrained_model_id: "CompVis/stable-diffusion-v1-4"
+unet:
+  subfolder: "unet"
+vae:
+  subfolder: "vae"
+scheduler:
+  subfolder: "scheduler"

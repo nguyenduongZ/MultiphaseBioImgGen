@@ -8,6 +8,7 @@ import torch
 import logging
 import numpy as np
 import pandas as pd
+import torchvision.transforms as T
 
 from tqdm import tqdm
 from datetime import datetime
@@ -16,7 +17,7 @@ from omegaconf import DictConfig, OmegaConf
 from hydra.core.hydra_config import HydraConfig
 
 from src.datasets.getds import get_ds
-from src.utils import MasterLogger, Logging
+from src.utils import MasterLogger, Logging, create_grid_image
 from src.models.imagen.build_imagen import ImagenBuilder
 from src.metrics import compute_fid, compute_cmmd, compute_kid, compute_clean_fid, compute_fcd, compute_lpips
 
@@ -99,9 +100,18 @@ def text_2_image(
                 save_image(sample_img, sample_image_filename)
 
                 if j == 0:
+                    real_image_pil = T.ToPILImage()(real_img.cpu())
+                    sample_img_pil = T.ToPILImage()(sample_img.cpu())
+                    
+                    grid_image = create_grid_image(
+                        original_image=real_image_pil,
+                        prompt=text,
+                        generated_image=sample_img_pil
+                    )
+                    
                     logging_manager.log_images(
-                        grid_image=sample_img.cpu(),
-                        prompt=sanitized_text,
+                        grid_image=grid_image,
+                        prompt=text,
                         iteration=i,
                         index=image_index
                     )
@@ -138,7 +148,7 @@ def text_2_image(
     
     logger.info("Computing final metrics on all images")
     fid_result = compute_fid(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device)
-    cmmd_mean, cmmd_std = compute_cmmd(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device)
+    # cmmd_mean, cmmd_std = compute_cmmd(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device)
     kid_mean, kid_std = compute_kid(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device)
     clean_fid_score = compute_clean_fid(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path)
     fcd_score = compute_fcd(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path)
@@ -147,8 +157,8 @@ def text_2_image(
     results = pd.DataFrame({
         'cond_scale': cond_scale,
         'Dataset': cfg.datasets['name'],
-        "CMMD_mean": [cmmd_mean],
-        "CMMD_std": [cmmd_std],
+        # "CMMD_mean": [cmmd_mean],
+        # "CMMD_std": [cmmd_std],
         'Model': cfg.models['name'],  
         'FID': [fid_result],
         'KID_mean': [kid_mean],

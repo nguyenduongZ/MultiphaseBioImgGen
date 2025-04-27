@@ -9,7 +9,13 @@ from tqdm import tqdm
 from torchmetrics.image.fid import FrechetInceptionDistance
 
 
-def compute_fid(cfg, logger: logging.Logger, real_image_save_path, sample_image_save_path, device):
+def compute_fid(
+    cfg, 
+    real_image_save_path: str, 
+    sample_image_save_path: str,
+    device: torch.device,
+    logger: logging.Logger, 
+):
     if not cfg.conductor["testing"]["FrechetInceptionDistance"]["usage"]:
         return None
     

@@ -8,7 +8,13 @@ from glob import glob
 from tqdm import tqdm
 from torchmetrics.image.kid import KernelInceptionDistance
 
-def compute_kid(cfg, logger: logging.Logger, real_image_save_path, sample_image_save_path, device):
+def compute_kid(
+    cfg, 
+    real_image_save_path: str, 
+    sample_image_save_path: str,
+    device: torch.device,
+    logger: logging.Logger, 
+):
     if not cfg.conductor["testing"]["KernelInceptionDistance"]["usage"]:
         return None, None
     

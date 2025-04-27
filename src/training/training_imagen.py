@@ -83,7 +83,7 @@ def main(cfg: DictConfig):
     )
     
     #
-    logger.info(f"Starting training for {dataset_name}")
+    logger.info(f"Starting Imagen training for {dataset_name}")
     total_iterations = cfg.conductor["trainer"]["iterations"]
     iteration_bar = tqdm(range(1, total_iterations + 1), desc="Training", dynamic_ncols=True)
     postfix_dict = {

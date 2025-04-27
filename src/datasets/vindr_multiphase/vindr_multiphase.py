@@ -12,7 +12,7 @@ import albumentations as A
 from imagen_pytorch.data import Dataset
 from sklearn.model_selection import train_test_split
 
-from src.datasets.preprocessing.text_embedding import get_text_t5_embedding
+from src.datasets.preprocessing.text_embedding import get_text_embedding
 
 def convert_pixel_to_hu(dcm):
     if not hasattr(dcm, "pixel_array"):
@@ -77,8 +77,8 @@ class VinDrMultiphase(Dataset):
         df.reset_index(inplace=True)
         
         unique_studies = df["StudyInstanceUID"].unique()
-        train_studies, temp_studies = train_test_split(unique_studies, train_size=0.8, random_state=42)
-        valid_studies, test_studies = train_test_split(temp_studies, train_size=0.5, random_state=42)
+        train_studies, temp_studies = train_test_split(unique_studies, train_size=0.8, random_state=self.cfg.conductor["seed"])
+        valid_studies, test_studies = train_test_split(temp_studies, train_size=0.5, random_state=self.cfg.conductor["seed"])
         
         # 80% 10% 10%
         self.train_df = df[df["StudyInstanceUID"].isin(train_studies)].reset_index(drop=True)
@@ -109,16 +109,16 @@ class VinDrMultiphase(Dataset):
         self.transform = A.Compose(transforms)
         
     def set_text_embeddings(self):
-        text_embeddings_dict = get_text_t5_embedding(self.cfg, "vindr_multiphase", self.split, self.df, self.full_df, self.logger)
+        text_embeddings = get_text_embedding(
+            cfg=self.cfg,
+            dataset_name="vindr_multiphase",
+            split=self.split,
+            df=self.df,
+            full_df=self.full_df,
+            logger=self.logger
+        )
 
-        self.embeddings = {}
-        for idx, row in self.df.iterrows():
-            if idx in text_embeddings_dict:
-                self.embeddings[idx] = text_embeddings_dict[idx]
-            else:
-                msg = f"Embedding for index {idx} not found in embeddings for {self.split} split"
-                self.logger.error(msg)
-                raise ValueError(msg)
+        self.embeddings = {i: emb for i, emb in enumerate(text_embeddings)}
         
         if len(self.embeddings) != len(self.df):
             msg = f"Embedding length ({len(self.embeddings)}) does not match DataFrame length ({len(self.df)}) for {self.split}"
@@ -149,18 +149,31 @@ class VinDrMultiphase(Dataset):
             raise FileNotFoundError(msg)
         
         try:
-            dcm = pydicom.dcmread(path, force=True)
+            dcm = pydicom.dcmread(path, force=True) # (H, W)
+            # self.logger.info(f"Shape of DICOM pixel data (before processing): {dcm.pixel_array.shape}")
         except Exception as e:
             self.logger.error(f"Failed to read DICOM file {path}: {e}")
             raise
         
-        hu_image = convert_pixel_to_hu(dcm)
+        # Convert to HU
+        hu_image = convert_pixel_to_hu(dcm) # (H, W)
+        # self.logger.info(f"Shape of image after HU conversion: {hu_image.shape}")
+        
+        # Apply windowing
         window_center = self.cfg.datasets["preprocessing"]["window_center"]
         window_width = self.cfg.datasets["preprocessing"]["window_width"]
-        image = apply_window(hu_image, window_center, window_width)
-        image = self.transform(image=image)["image"]
-        image = torch.from_numpy(image).unsqueeze(0).float()
-        image = image.expand(3, -1, -1)
+        image = apply_window(hu_image, window_center, window_width) # (H, W)
+        # self.logger.info(f"Shape of image after windowing: {image.shape}")
+        
+        # Apply transformations (resize, flip, etc.)
+        image = self.transform(image=image)["image"] # (H, W)
+        # self.logger.info(f"Shape of image after transforms: {image.shape}")
+        
+        # Convert to PyTorch tensor
+        image = torch.from_numpy(image).unsqueeze(0).float() # (1, H, W)
+        # self.logger.info(f"Shape of image after permute (C, H, W): {image.shape}")
+        
+        image = image.expand(3, -1, -1) # (3, H, W)
         
         text_embedding = self.embeddings[idx]
         
