@@ -2,11 +2,11 @@ name: MasterLogger
 level: INFO
 
 wandb:
-  usage: False
+  usage: True
   run_name: 
   wandb_prj: MultiphaseBioImgGen
   entity: scalemind
 
 log:
-  usage: False
+  usage: True
   exp_dir: 

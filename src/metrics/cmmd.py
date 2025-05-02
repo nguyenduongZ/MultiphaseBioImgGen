@@ -43,6 +43,7 @@ class CMMDMetric:
         if self.normalize:
             images = images * 2.0 - 1.0  # Convert [0, 1] to [-1, 1] for CLIP
         images = self._resize_bicubic(images, self.input_image_size)
+        images = images.permute(0, 2, 3, 1)
         inputs = self.image_processor(images=images, return_tensors="pt", do_rescale=False)
         inputs = inputs.to(self.device)
         with torch.no_grad():
@@ -112,7 +113,7 @@ def compute_cmmd(
         return None, None
     
     cmmd_params = cfg.conductor["testing"]["CMMD"]["params"]
-    cmmd = CMMDMetric(**cmmd_params).to(device)
+    cmmd = CMMDMetric(**cmmd_params)
     logger.info("CMMD initialized")
     
     real_image_path_list = sorted(glob(os.path.join(real_image_save_path, "*_real_image_batch.pt")))
@@ -147,3 +148,26 @@ def compute_cmmd(
         
     return cmmd_mean, cmmd_std
     
+# if __name__ == "__main__":
+#     from omegaconf import OmegaConf
+#     cfg = OmegaConf.load("./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/.hydra/config.yaml")
+    
+#     logging.basicConfig(level=logging.INFO)
+#     logger = logging.getLogger("Evaluate clean-fid & clean-kid")
+#     logger.info("Starting elvaluate")
+    
+#     real_image_save_path = "./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/real_images/cond_scale6_loss_weighting_p2/42"
+#     sample_image_save_path = "./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/sample_images/cond_scale6_loss_weighting_p2/42"
+    
+#     idx = 0
+#     device = torch.device(f"cuda:{idx}" if torch.cuda.is_available() else "cpu")
+    
+#     cmmd_mean, cmmd_std = compute_cmmd(
+#         cfg=cfg,
+#         real_image_save_path=real_image_save_path,
+#         sample_image_save_path=sample_image_save_path,
+#         device=device,
+#         logger=logger
+#     )
+    
+#     print(f"Result {cmmd_mean}, {cmmd_std}")

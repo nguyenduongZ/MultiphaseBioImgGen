@@ -3,6 +3,7 @@ sys.path.append(os.path.abspath(os.curdir))
 
 import torch
 import hydra
+import logging
 import numpy as np
 import torchvision.transforms as T
 
@@ -14,12 +15,12 @@ from src.datasets.getds import get_ds
 from src.models.imagen.build_imagen import ImagenBuilder
 from src.utils import MasterLogger, Logging, EarlyStopping, create_grid_image, setup_seed
 
-def clear_old_checkpoints(current_i, checkpoint_dir, max_checkpoints=5):
+def clear_old_checkpoints(current_i, checkpoint_dir, max_checkpoints=3):
     checkpoint_files = sorted([f for f in os.listdir(checkpoint_dir) if f.startswith("checkpoint-iter")])
     if len(checkpoint_files) > max_checkpoints:
         for file in checkpoint_files[:-max_checkpoints]:
             os.remove(os.path.join(checkpoint_dir, file))
-
+    
 @hydra.main(config_path="../../configs", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):
     OmegaConf.set_readonly(cfg, False)
@@ -53,11 +54,6 @@ def main(cfg: DictConfig):
     logger.info(f"Dataset sizes: train={len(train_ds)}, valid={len(valid_ds)}, test={len(test_ds)}")
     logger.info(f"Dataloader sizes: train={len(train_dl)}, valid={len(valid_dl)}, test={len(test_dl)}")
 
-    for v, (img, emb, prompt) in enumerate(test_dl):
-        print(prompt[:3]) 
-        if v > 2:
-            break
-    
     trainer.add_train_dataloader(dl=train_dl)
     trainer.add_valid_dataloader(dl=valid_dl)
     
@@ -88,8 +84,7 @@ def main(cfg: DictConfig):
     iteration_bar = tqdm(range(1, total_iterations + 1), desc="Training", dynamic_ncols=True)
     postfix_dict = {
         "Train": 0.0,
-        "Valid": 0.0,
-        "Iter": f"0/{total_iterations}"
+        "Valid": 0.0
     }
     iteration_bar.set_postfix(postfix_dict)
     last_checkpoint_i = None
@@ -101,7 +96,6 @@ def main(cfg: DictConfig):
         logging("train_loss", loss, step=i)
         
         postfix_dict["Train"] = f"{loss:.4f}"
-        postfix_dict["Iter"] = f"{i}/{total_iterations}"
         iteration_bar.set_postfix(postfix_dict)
         
         # Validation

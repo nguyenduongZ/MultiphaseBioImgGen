@@ -36,3 +36,27 @@ def compute_kid(
     logger.info(f"KID result: Mean {kid_mean} - STD {kid_std}")
     
     return kid_mean, kid_std
+
+# if __name__ == "__main__":
+#     from omegaconf import OmegaConf
+#     cfg = OmegaConf.load("./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/.hydra/config.yaml")
+    
+#     logging.basicConfig(level=logging.INFO)
+#     logger = logging.getLogger("Evaluate FID")
+#     logger.info("Starting elvaluate")
+    
+#     real_image_save_path = "./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/real_images/cond_scale6_loss_weighting_p2/42"
+#     sample_image_save_path = "./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/sample_images/cond_scale6_loss_weighting_p2/42"
+    
+#     idx = 1
+#     device = torch.device(f"cuda:{idx}" if torch.cuda.is_available() else "cpu")
+    
+#     kid_mean, kid_std = compute_kid(
+#         cfg=cfg,
+#         real_image_save_path=real_image_save_path,
+#         sample_image_save_path=sample_image_save_path,
+#         device=device,
+#         logger=logger
+#     )
+    
+#     print(f"Result {kid_mean}, {kid_std}")

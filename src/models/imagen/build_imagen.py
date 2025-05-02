@@ -51,9 +51,9 @@ class ImagenBuilder:
         
         if self.testing:
             test_model_save = os.path.join("./", self.cfg.conductor["testing"]["PATH_MODEL_TESTING"])
-            self.imagen_model = load_imagen_from_checkpoint(test_model_save)
+            self.imagen_model = load_imagen_from_checkpoint(test_model_save, load_ema_if_available=True)
         elif glob.glob(path_model_load):
-            self.imagen_model = load_imagen_from_checkpoint(path_model_load)
+            self.imagen_model = load_imagen_from_checkpoint(path_model_load, load_ema_if_available=True)
         else:
             if self.is_elucidated:
                 self.imagen_model = ElucidatedImagenConfig(
@@ -68,12 +68,22 @@ class ImagenBuilder:
 
         if torch.cuda.is_available():
             self.imagen_model = self.imagen_model.to(self.device)
-    
+
+        def get_model_size(model):
+            param_size = sum(p.numel() * p.element_size() for p in model.parameters())
+            buffer_size = sum(b.numel() * b.element_size() for b in model.buffers())
+            size_all_mb = (param_size + buffer_size) / 1024**2
+            
+            return size_all_mb
+        
+        size_mb = get_model_size(self.imagen_model)
+        self.logger.info(f"Model size: {size_mb:.2f} MB")
+            
     def build_trainer(self):
         self.trainer = ImagenTrainer(
             imagen=self.imagen_model,
             split_valid_from_train=self.cfg.conductor["trainer"]["split_valid_from_train"],
-            dl_tuple_output_keywords_names=self.cfg.conductor["trainer"]["dl_tuple_output_keywords_names"]
+            dl_tuple_output_keywords_names=self.cfg.conductor["trainer"]["dl_tuple_output_keywords_names"],
         )
         
         if torch.cuda.is_available():

@@ -63,13 +63,15 @@ def text_2_image(
         
         real_image_batch = image_batch.to(device)
         
+        print(f"Sampling with unet_number = {unet_number}")
         with torch.autocast("cuda"):
             with torch.no_grad():
                 sample_image_batch = model.trainer.sample(
                     text_embeds=embed_batch.to(device),
                     return_pil_images=False,
                     stop_at_unet_number=unet_number,
-                    cond_scale=cond_scale
+                    cond_scale=cond_scale,
+                    batch_size=batch_size
                 )
                 
         logger.info(f"Processing batch {i}/{upper_batch} - {batch_size} images per batch")
@@ -99,7 +101,7 @@ def text_2_image(
                 save_image(real_img, real_image_filename)
                 save_image(sample_img, sample_image_filename)
 
-                if j == 0:
+                if j in range(len(real_img)):
                     real_image_pil = T.ToPILImage()(real_img.cpu())
                     sample_img_pil = T.ToPILImage()(sample_img.cpu())
                     
@@ -115,28 +117,27 @@ def text_2_image(
                         iteration=i,
                         index=image_index
                     )
-        
-        logger.info(f"Computing metrics for batch {i}")
-        fid_result = compute_fid(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device)
-        clean_fid_score = compute_clean_fid(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path)
-        fcd_score = compute_fcd(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path)
-        lpips_mean = compute_lpips(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device, timestamp=timestamp)
-        
-        logging_manager("FID_per_batch", fid_result, step=i)
-        logging_manager("Clean_FID_per_batch", clean_fid_score, step=i)
-        logging_manager("FCD_per_batch", fcd_score, step=i)
-        logging_manager("LPIPS_per_batch", lpips_mean, step=i)
+                    
+        batch_interval = cfg.conductor["testing"]["batch_interval"]
+        if i % batch_interval == 0:
+            logger.info(f"Computing metrics for batch {i}")
+            fid_result = compute_fid(cfg=cfg, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device, logger=logger)
+            clean_fid_score = compute_clean_fid(cfg=cfg, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device, logger=logger)
+            fcd_score = compute_fcd(cfg=cfg, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device, logger=logger)
+            
+            logging_manager("FID_per_batch", fid_result, step=i)
+            logging_manager("Clean_FID_per_batch", clean_fid_score, step=i)
+            logging_manager("FCD_per_batch", fcd_score, step=i)
 
-        metrics_history.append({
-            'batch': i,
-            'cond_scale': cond_scale,
-            'Dataset': cfg.datasets['name'],
-            'Model': cfg.models['name'],
-            'FID': fid_result,
-            'Clean_FID': clean_fid_score,
-            'FCD': fcd_score,
-            'LPIPS': lpips_mean
-        })
+            metrics_history.append({
+                'batch': i,
+                'cond_scale': cond_scale,
+                'Dataset': cfg.datasets['name'],
+                'Model': cfg.models['name'],
+                'FID': fid_result,
+                'Clean_FID': clean_fid_score,
+                'FCD': fcd_score
+            })
         
         torch.cuda.empty_cache()
         
@@ -147,20 +148,20 @@ def text_2_image(
     logger.info(f"Image generation completed! Expected: {total_images_expected}, Generated: {(upper_batch - lower_batch) * batch_size}")
     
     logger.info("Computing final metrics on all images")
-    fid_result = compute_fid(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device)
-    # cmmd_mean, cmmd_std = compute_cmmd(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device)
-    kid_mean, kid_std = compute_kid(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device)
-    clean_fid_score = compute_clean_fid(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path)
-    fcd_score = compute_fcd(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path)
-    lpips_mean = compute_lpips(cfg=cfg, logger=logger, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device, timestamp=timestamp)
+    fid_result = compute_fid(cfg=cfg, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device, logger=logger)
+    cmmd_mean, cmmd_std = compute_cmmd(cfg=cfg, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device, logger=logger)
+    kid_mean, kid_std = compute_kid(cfg=cfg, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device, logger=logger)
+    clean_fid_score = compute_clean_fid(cfg=cfg, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device, logger=logger)
+    fcd_score = compute_fcd(cfg=cfg, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device, logger=logger)
+    lpips_mean = compute_lpips(cfg=cfg, real_image_save_path=real_image_save_path, sample_image_save_path=sample_image_save_path, device=device, logger=logger, timestamp=timestamp)
     
     results = pd.DataFrame({
         'cond_scale': cond_scale,
         'Dataset': cfg.datasets['name'],
-        # "CMMD_mean": [cmmd_mean],
-        # "CMMD_std": [cmmd_std],
         'Model': cfg.models['name'],  
         'FID': [fid_result],
+        "CMMD_mean": [cmmd_mean],
+        "CMMD_std": [cmmd_std],
         'KID_mean': [kid_mean],
         'KID_std': [kid_std],
         'Clean_FID': [clean_fid_score],
@@ -169,6 +170,12 @@ def text_2_image(
     })
 
     results.to_csv(os.path.join(sample_image_save_path, f"{timestamp}_results.csv"), index=False)
+    logging_manager("FID", fid_result, step=upper_batch)
+    logging_manager("Clean_FID", clean_fid_score, step=upper_batch)
+    logging_manager("FCD", fcd_score, step=upper_batch)
+    logging_manager("CMMD_mean", cmmd_mean, step=upper_batch)
+    logging_manager("KID_mean", kid_mean, step=upper_batch)
+    logging_manager("LPIPS", lpips_mean, step=upper_batch)
     logger.info("Metrics computed and saved successfully!")    
     
     gc.collect()
@@ -176,6 +183,30 @@ def text_2_image(
 @hydra.main(config_path="../../configs", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):
     OmegaConf.set_readonly(cfg, False)
+    
+    configurations = [
+        {
+            "cond_scale": 2,
+            "testing.PATH_MODEL_TESTING": "./results/training/vindr_multiphase_imagen/unet1/cond_scale_2/2025-04-27_13-29-49/checkpoints/checkpoint-final.pt"
+        },
+        {
+            "cond_scale": 3,
+            "testing.PATH_MODEL_TESTING": "./results/training/vindr_multiphase_imagen/unet1/cond_scale_3/2025-04-28_03-58-32/checkpoints/checkpoint-final.pt"
+        },
+        {
+            "cond_scale": 1,
+            "testing.PATH_MODEL_TESTING": "./results/training/vindr_multiphase_imagen/unet1/cond_scale_1/2025-04-28_17-21-06/checkpoints/checkpoint-final.pt"
+        },
+        {
+            "cond_scale": 4,
+            "testing.PATH_MODEL_TESTING": "./results/training/vindr_multiphase_imagen/unet1/cond_scale_4/2025-04-29_06-07-49/checkpoints/checkpoint-final.pt"
+        },
+    ]
+    
+    config_index = cfg.conductor.get("config_index", 0)
+    selected_config = configurations[config_index]
+    cfg.conductor.cond_scale = selected_config["cond_scale"]
+    cfg.conductor.testing.PATH_MODEL_TESTING = selected_config["testing.PATH_MODEL_TESTING"]
     
     # MasterLogger
     logger = MasterLogger(cfg).logger
@@ -193,12 +224,12 @@ def main(cfg: DictConfig):
     
     # Dataset setup
     dataset_name = cfg.datasets["name"]
-    # full_ds, full_dl = get_ds(cfg=cfg, logger=logger, testing=True)
+    full_ds, full_dl = get_ds(cfg=cfg, logger=logger, testing=True)
     
-    # logger.info(f"Dataset {dataset_name} sizes: {len(full_ds)}")
-    # logger.info(f"Dataloader {dataset_name} sizes: {len(full_dl)}")
+    logger.info(f"Dataset {dataset_name} sizes: {len(full_ds)}")
+    logger.info(f"Dataloader {dataset_name} sizes: {len(full_dl)}")
 
-    train_ds, valid_ds, test_ds, train_dl, valid_dl, test_dl = get_ds(cfg=cfg, logger=logger)
+    # train_ds, valid_ds, test_ds, train_dl, valid_dl, test_dl = get_ds(cfg=cfg, logger=logger)
     
     save_samples = cfg.conductor["testing"]["save_samples"]
     save_image_tensors = cfg.conductor["testing"]["save_image_tensors"]
@@ -212,7 +243,7 @@ def main(cfg: DictConfig):
     
     text_2_image(
         cfg=cfg,
-        sample_dl=test_dl,
+        sample_dl=full_dl,
         model=model,
         device=device,
         logger=logger,

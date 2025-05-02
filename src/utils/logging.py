@@ -31,6 +31,22 @@ class Logging:
             )
             self.__run.define_metric("*", step_metric="global_step")
 
+            # config = self.__run.config
+            # if "cond_scale" in config:
+            #     self.__cfg.conductor["cond_scale"] = config["cond_scale"]
+            # if "unet_number" in config:
+            #     self.__cfg.conductor["unet_number"] = config["unet_number"]
+            # if "batch_size" in config:
+            #     self.__cfg.conductor["trainer"]["batch_size"] = config["batch_size"]
+            # if "idx" in config:
+            #     self.__cfg.conductor["trainer"]["idx"] = config["idx"]
+            # if "PATH_MODEL_LOAD" in config:
+            #     self.__cfg.conductor["trainer"]["PATH_MODEL_LOAD"] = config["PATH_MODEL_LOAD"]
+            # if "wandb_usage" in config:
+            #     self.__cfg.utils["wandb"]["usage"] = config["wandb_usage"]
+            # if "log_usage" in config:
+            #     self.__cfg.utils["log"]["usage"] = config["log_usage"]
+                    
         if self.__cfg.utils["log"]["usage"]:
             self.__writer = SummaryWriter(self.__cfg.utils["log"]["exp_dir"])
             cfg_dict = OmegaConf.to_container(self.__cfg, resolve=True)

@@ -8,6 +8,7 @@ import pandas as pd
 
 from glob import glob
 from tqdm import tqdm
+from datetime import datetime
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
 def rescale_tensor(x):
@@ -48,3 +49,28 @@ def compute_lpips(
         }).to_json(sample_image_save_path + timestamp + "_lpips.json")
     
     return lpips_mean
+
+# if __name__ == "__main__":
+#     from omegaconf import OmegaConf
+#     cfg = OmegaConf.load("./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/.hydra/config.yaml")
+    
+#     logging.basicConfig(level=logging.INFO)
+#     logger = logging.getLogger("Evaluate LPIPS")
+#     logger.info("Starting elvaluate")
+    
+#     real_image_save_path = "./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/real_images/cond_scale6_loss_weighting_p2/42"
+#     sample_image_save_path = "./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/sample_images/cond_scale6_loss_weighting_p2/42"
+    
+#     idx = 1
+#     device = torch.device(f"cuda:{idx}" if torch.cuda.is_available() else "cpu")
+    
+#     lpips_mean = compute_lpips(
+#         cfg=cfg,
+#         real_image_save_path=real_image_save_path,
+#         sample_image_save_path=sample_image_save_path,
+#         device=device,
+#         logger=logger,
+#         timestamp = datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
+#     )
+    
+#     print(f"Result {lpips_mean}")

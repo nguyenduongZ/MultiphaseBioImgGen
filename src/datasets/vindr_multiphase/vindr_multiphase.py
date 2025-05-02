@@ -41,14 +41,16 @@ class VinDrMultiphase(Dataset):
         self, 
         cfg, 
         logger: logging.Logger, 
-        split: str, 
-        return_text=False
+        split: str,
+        use_text_embedding: bool = True,
+        return_3d: bool = False 
     ):
         self.cfg = cfg
         self.logger = logger
         self.split = split
-        self.return_text = return_text
-
+        self.use_text_embedding = use_text_embedding
+        self.return_3d = return_3d
+        
         self.image_size = cfg.datasets["augmentation"]["image_size"]
         
         super().__init__(
@@ -66,8 +68,15 @@ class VinDrMultiphase(Dataset):
         else:
             raise ValueError(f"Invalid split: {self.split}")
 
+        if self.return_3d:
+            self.grouped_df = self.df.groupby(["StudyInstanceUID", "SeriesInstanceUID"])
+            self.group_keys = list(self.grouped_df.keys())
+        
         self.set_transforms()
-        self.set_text_embeddings()
+        if self.use_text_embedding:
+            self.set_text_embeddings()
+        else:
+            self.embeddings = None
         
     def set_df_splits(self):
         csv_path = self.cfg.datasets["PATH_METADATA_PROMPT_FILE"]
@@ -75,7 +84,21 @@ class VinDrMultiphase(Dataset):
             self.logger.error(f"Metadata CSV not found: {csv_path}")
         df = pd.read_csv(csv_path, low_memory=False)
         df.reset_index(inplace=True)
+
+        label_mapping = {
+            "Non contrast": 0,
+            "Arterial": 1,
+            "Venous": 2,
+            "Other": 3
+        }
+        if not all(label in label_mapping for label in df["Label"].unique()):
+            unknown_labels = set(df["Label"].unique()) - set(label_mapping.keys())
+            msg = f"Unknown labels found: {unknown_labels}"
+            self.logger.error(msg)
+            raise ValueError(msg)
         
+        df["Label"] = df["Label"].map(label_mapping)
+
         unique_studies = df["StudyInstanceUID"].unique()
         train_studies, temp_studies = train_test_split(unique_studies, train_size=0.8, random_state=self.cfg.conductor["seed"])
         valid_studies, test_studies = train_test_split(temp_studies, train_size=0.5, random_state=self.cfg.conductor["seed"])
@@ -131,7 +154,7 @@ class VinDrMultiphase(Dataset):
             self.logger.error(msg)
             raise ValueError(msg)
         
-        return len(self.df)
+        return len(self.group_keys) if self.return_3d else len(self.df)
 
     def __getitem__(self, idx):
         if self.df is None or self.embeddings is None:
@@ -139,49 +162,78 @@ class VinDrMultiphase(Dataset):
             self.logger.error(msg)
             raise ValueError(msg)
         
-        row = self.df.iloc[idx]
-        path = row["image_path"]
-        prompt = row["prompt"]
+        # 3D
+        if self.return_3d:
+            study_id, series_id = self.group_keys[idx]
+            group = self.grouped_df.get_group((study_id, series_id))
+            
+            group = group.sort_values("InstanceNumber")
+            
+            image_paths = group["image_path"].tolist()
+            label = group["Label"].iloc[0]
+
+            slices = []
+            for path in image_paths:
+                if not os.path.exists(path):
+                    msg = f"DICOM file not found: {path}"
+                    self.logger.error(msg)
+                    raise FileNotFoundError(msg)
+                
+                try:
+                    dcm = pydicom.dcmread(path, force=True)  # (H, W)
+                except Exception as e:
+                    self.logger.error(f"Failed to read DICOM file {path}: {e}")
+                    raise
+                
+                hu_image = convert_pixel_to_hu(dcm)
+                window_center = self.cfg.datasets["preprocessing"]["window_center"]
+                window_width = self.cfg.datasets["preprocessing"]["window_width"]
+                image = apply_window(hu_image, window_center, window_width)
+                
+                image = self.transform(image=image)["image"]
+                
+                slices.append(image)
+                
+            volume = np.stack(slices, axis=0) # (D, H, W)
+            volume = torch.from_numpy(volume).float()
+            volume = volume.unsqueeze(0) # (1, D, H, W)
+            
+            return volume, label
         
-        if not os.path.exists(path):
-            msg = f"DICOM file not found: {path}"
-            self.logger.error(msg)
-            raise FileNotFoundError(msg)
-        
-        try:
-            dcm = pydicom.dcmread(path, force=True) # (H, W)
-            # self.logger.info(f"Shape of DICOM pixel data (before processing): {dcm.pixel_array.shape}")
-        except Exception as e:
-            self.logger.error(f"Failed to read DICOM file {path}: {e}")
-            raise
-        
-        # Convert to HU
-        hu_image = convert_pixel_to_hu(dcm) # (H, W)
-        # self.logger.info(f"Shape of image after HU conversion: {hu_image.shape}")
-        
-        # Apply windowing
-        window_center = self.cfg.datasets["preprocessing"]["window_center"]
-        window_width = self.cfg.datasets["preprocessing"]["window_width"]
-        image = apply_window(hu_image, window_center, window_width) # (H, W)
-        # self.logger.info(f"Shape of image after windowing: {image.shape}")
-        
-        # Apply transformations (resize, flip, etc.)
-        image = self.transform(image=image)["image"] # (H, W)
-        # self.logger.info(f"Shape of image after transforms: {image.shape}")
-        
-        # Convert to PyTorch tensor
-        image = torch.from_numpy(image).unsqueeze(0).float() # (1, H, W)
-        # self.logger.info(f"Shape of image after permute (C, H, W): {image.shape}")
-        
-        image = image.expand(3, -1, -1) # (3, H, W)
-        
-        text_embedding = self.embeddings[idx]
-        
-        if idx not in self.embeddings:
-            msg = f"Embedding for index {idx} not found"
-            self.logger.error(msg)
-            raise ValueError(msg)
-        
-        # self.logger.debug(f"Index: {idx}, Image Path: {path}, Prompt: {prompt}, Embedding Shape: {text_embedding.shape}")
-        
-        return (image, text_embedding, prompt) if self.return_text else (image, text_embedding)
+        # 2D    
+        else:
+            row = self.df.iloc[idx]
+            path = row["image_path"]
+            prompt = row["prompt"]
+            label = row["Label"]
+            
+            if not os.path.exists(path):
+                msg = f"DICOM file not found: {path}"
+                self.logger.error(msg)
+                raise FileNotFoundError(msg)
+            
+            try:
+                dcm = pydicom.dcmread(path, force=True) # (H, W)
+            except Exception as e:
+                self.logger.error(f"Failed to read DICOM file {path}: {e}")
+                raise
+
+            hu_image = convert_pixel_to_hu(dcm) # (H, W)
+            window_center = self.cfg.datasets["preprocessing"]["window_center"]
+            window_width = self.cfg.datasets["preprocessing"]["window_width"]
+            image = apply_window(hu_image, window_center, window_width) # (H, W)
+            image = self.transform(image=image)["image"] # (H, W)
+            image = torch.from_numpy(image).unsqueeze(0).float() # (1, H, W)            
+            image = image.expand(3, -1, -1) # (3, H, W)
+            
+            if self.use_text_embedding:
+                text_embedding = self.embeddings[idx]
+            
+                if idx not in self.embeddings:
+                    msg = f"Embedding for index {idx} not found"
+                    self.logger.error(msg)
+                    raise ValueError(msg)
+                        
+                return image, text_embedding, prompt
+            else:
+                return image, None, prompt, label
