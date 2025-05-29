@@ -1,0 +1,79 @@
+model:
+  name: imagen
+  imagen:
+    video: false
+    timesteps: [1024, 512]
+    image_sizes: [64, 256]
+    random_crop_sizes: [null, 64]
+    condition_on_text: true
+    cond_drop_prob: 0.1
+    text_encoder_name: google/t5-v1_1-base # google/t5-v1_1-large
+
+    unets:
+      - dim: 128
+        dim_mults: [1, 2, 3, 4]
+        num_resnet_blocks: 3
+        layer_attns: [false, true, true, true]
+        layer_cross_attns: [false, true, true, true]
+        attn_heads: 8
+
+      - dim: 128
+        dim_mults: [1, 2, 4, 8]
+        num_resnet_blocks: [2, 4, 8, 8]
+        layer_attns: [false, false, false, true]
+        layer_cross_attns: [false, false, false, true]
+        attn_heads: 8
+
+conductor:
+  unet: 1
+  trainer: 
+    split_valid_from_train: false
+    dl_tuple_output_keywords_names: [images, text_embeds]
+
+name: vindr_multiphase
+PATH_DICOM_DIR: /media/mountHDD1/users/duong/git/MultiphaseBioImgGen/data/vindr_multiphase/abdomen_phases
+PATH_METADATA_PROMPT_FILE: /media/mountHDD1/users/duong/git/scratch/MultiphaseBioImgGen/data/vindr_multiphase/metadata_prompt.csv
+
+t5_embeddings:
+  train: /media/mountHDD1/users/duong/git/MultiphaseBioImgGen/data/vindr_multiphase/t5_embeddings/train.pt
+  valid: /media/mountHDD1/users/duong/git/MultiphaseBioImgGen/data/vindr_multiphase/t5_embeddings/valid.pt
+  test: /media/mountHDD1/users/duong/git/MultiphaseBioImgGen/data/vindr_multiphase/t5_embeddings/test.pt
+
+preprocessing:  
+  window_center: 40
+  window_width: 400
+
+augmentation:
+  image_size: 256
+  horizontal_flip:
+    params:
+      p: 0.2
+  affine:
+    params:
+      translate_percent: 0.0625
+      scale: [0.9, 1.1]
+      rotate: [-3, 3]
+      p: 0.2
+
+classes:
+  Non contrast: non contrast
+  Arterial: arterial
+  Venous: venous
+  Other: other
+
+num_classes: 4
+
+return_3d: false
+
+## DataLoader:
+batch_size: 32
+num_workers: 4
+pin_memory: True
+shuffle: True
+
+num_train_sample: 
+num_valid_sample: 
+num_test_sample: 
+num_train_batch:
+num_valid_batch:
+num_test_batch:
