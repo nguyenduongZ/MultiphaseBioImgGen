@@ -1,23 +1,9 @@
 defaults:
-  - conductor: conductor
-  - models: imagen
-  - datasets: vindr_multiphase
-  - utils: utils
-  - override hydra/job_logging: disabled
-  - override hydra/hydra_logging: disabled
+  - conductor: default_imagen
+  - model: imagen
+  - data: vindr_multiphase
   - _self_
 
 hydra:
   run:
-    dir: results/${conductor.mode}/${datasets.name}_${models.name}/unet${conductor.unet_number}/cond_scale_${conductor.cond_scale}/${now:%Y-%m-%d_%H-%M-%S}/.hydra
-  output_subdir: ""
-  job_logging:
-    disable_existing_loggers: true
-    root:
-      level: OFF
-      handlers: []
-  hydra_logging:
-    disable_existing_loggers: true
-    root:
-      level: OFF
-      handlers: []
+    dir: ./results/${conductor.mode}/${data.name}_${model.name}/unet${conductor.unet}/${now:%Y-%m-%d}/${now:%H-%M-%S}

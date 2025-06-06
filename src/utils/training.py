@@ -4,7 +4,10 @@ import numpy as np
 
 from PIL import Image, ImageDraw, ImageFont
 
-def create_grid_image(original_image, prompt, generated_image, grid_size=(256, 256), font_size=20):
+def simple_slugify(text: str, max_length = 255):
+    return text.replace('-', '_').replace(',', '').replace(' ', '_').replace('|', '--').strip('-_./\\')[:max_length]
+
+def create_grid_image(original_image, prompt, generated_image, grid_size=(300, 300), font_size=10):
     border_color = "black"
     border_width = 2
 
@@ -74,41 +77,11 @@ def create_grid_image(original_image, prompt, generated_image, grid_size=(256, 2
 
     return grid
 
-def setup_seed(seed: int):
+def setup_seed(seed: int, deterministic: bool = None, benchmark: bool = None):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    
-class EarlyStopping:
-    def __init__(
-        self, 
-        patience: int = 10000, 
-        min_delta: float = 1e-4, 
-        logger=None,
-        verbose: bool = True
-    ):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.logger = logger
-        self.verbose = verbose
-        self.best_loss = None
-        self.counter = 0
-        self.early_stop = False
-        
-    def __call__(self, valid_loss, iteration=None):
-        if self.best_loss is None:
-            self.best_loss = valid_loss
-        elif valid_loss < self.best_loss - self.min_delta:
-            self.best_loss = valid_loss
-            self.counter = 0 
-        else:
-            self.counter += 1
-            if self.counter >= self.patience:
-                self.early_stop = True
-                if self.verbose:
-                    self.logger.info(f"Early stopping triggered at iteration {iteration}")
-        return self.early_stop
+    torch.backends.cudnn.deterministic = deterministic
+    torch.backends.cudnn.benchmark = benchmark

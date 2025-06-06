@@ -1,173 +1,228 @@
-import os, sys
-sys.path.append(os.path.abspath(os.curdir))
-
 import torch
 import logging
 import numpy as np
 
-from glob import glob
 from tqdm import tqdm
+from glob import glob
+from PIL import Image
+from torch.utils.data import Dataset, DataLoader
 from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 
-class CMMDMetric:
-    def __init__(
-        self, 
-        model_name: str = "openai/clip-vit-large-patch14-336",
-        normalize: bool = True,
-        subsets: int = 50,
-        subset_size: int = 100,
-        device: torch.device = None
-    ):
+_SIGMA = 10
+_SCALE = 1000
+
+def mmd(x, y):
+    """Memory-efficient MMD implementation in JAX.
+
+    This implements the minimum-variance/biased version of the estimator described
+    in Eq.(5) of
+    https://jmlr.csail.mit.edu/papers/volume13/gretton12a/gretton12a.pdf.
+    As described in Lemma 6's proof in that paper, the unbiased estimate and the
+    minimum-variance estimate for MMD are almost identical.
+
+    Note that the first invocation of this function will be considerably slow due
+    to JAX JIT compilation.
+
+    Args:
+        x: The first set of embeddings of shape (n, embedding_dim).
+        y: The second set of embeddings of shape (n, embedding_dim).
+
+    Returns:
+        The MMD distance between x and y embedding sets.
+    """
+    x = torch.from_numpy(x)
+    y = torch.from_numpy(y)
+
+    x_sqnorms = torch.diag(torch.matmul(x, x.T))
+    y_sqnorms = torch.diag(torch.matmul(y, y.T))
+
+    gamma = 1 / (2 * _SIGMA**2)
+    k_xx = torch.mean(
+        torch.exp(-gamma * (-2 * torch.matmul(x, x.T) + torch.unsqueeze(x_sqnorms, 1) + torch.unsqueeze(x_sqnorms, 0)))
+    )
+    k_xy = torch.mean(
+        torch.exp(-gamma * (-2 * torch.matmul(x, y.T) + torch.unsqueeze(x_sqnorms, 1) + torch.unsqueeze(y_sqnorms, 0)))
+    )
+    k_yy = torch.mean(
+        torch.exp(-gamma * (-2 * torch.matmul(y, y.T) + torch.unsqueeze(y_sqnorms, 1) + torch.unsqueeze(y_sqnorms, 0)))
+    )
+
+    return _SCALE * (k_xx + k_yy - 2 * k_xy)
+
+def _resize_bicubic(images, size):
+    images = torch.from_numpy(images.transpose(0, 3, 1, 2))
+    images = torch.nn.functional.interpolate(images, size=(size, size), mode="bicubic")
+    images = images.permute(0, 2, 3, 1).numpy()
+    return images
+
+class ClipEmbeddingModel:
+    """CLIP image embedding calculator."""
+
+    def __init__(self, CLIP_MODEL_NAME, device):
         self.device = device
-        self.normalize = normalize
-        self.subsets = subsets
-        self.subset_size = subset_size
-        self.image_processor = CLIPImageProcessor.from_pretrained(model_name)
-        self.model = CLIPVisionModelWithProjection.from_pretrained(model_name).eval().to(device)
+        self.image_processor = CLIPImageProcessor.from_pretrained(CLIP_MODEL_NAME)
+
+        self._model = CLIPVisionModelWithProjection.from_pretrained(CLIP_MODEL_NAME).eval()
+        if torch.cuda.is_available():
+            self._model = self._model.to(self.device)
+
         self.input_image_size = self.image_processor.crop_size["height"]
-        self.real_embeds = []
-        self.fake_embeds = []
-        
-    def _resize_bicubic(self, images, size):
-        images = images.permute(0, 2, 3, 1)  # [B, C, H, W] -> [B, H, W, C]
-        images = torch.nn.functional.interpolate(
-            images, size=(size, size), mode="bicubic", align_corners=False
+
+    @torch.no_grad()
+    def embed(self, images):
+        """Computes CLIP embeddings for the given images.
+
+        Args:
+            images: An image array of shape (batch_size, height, width, 3). Values are in range [0, 1].
+
+        Returns:
+            Embedding array of shape (batch_size, embedding_width).
+        """
+
+        images = _resize_bicubic(images, self.input_image_size)
+        inputs = self.image_processor(
+            images=images,
+            do_normalize=True,
+            do_center_crop=False,
+            do_resize=False,
+            do_rescale=False,
+            return_tensors="pt",
         )
-        images = images.permute(0, 3, 1, 2)  # [B, H, W, C] -> [B, C, H, W]
-        
-        return images
+        if torch.cuda.is_available():
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+        image_embs = self._model(**inputs).image_embeds.cpu()
+        image_embs /= torch.linalg.norm(image_embs, axis=-1, keepdims=True)
+        return image_embs
     
-    def update(self, images, real):
-        if images.shape[1] != 3:
-            raise ValueError(f"Expected 3-channel images, got {images.shape[1]} channels")
-        if self.normalize:
-            images = images * 2.0 - 1.0  # Convert [0, 1] to [-1, 1] for CLIP
-        images = self._resize_bicubic(images, self.input_image_size)
-        images = images.permute(0, 2, 3, 1)
-        inputs = self.image_processor(images=images, return_tensors="pt", do_rescale=False)
-        inputs = inputs.to(self.device)
-        with torch.no_grad():
-            embeddings = self.model(**inputs).image_embeds
-        if real:
-            self.real_embeds.append(embeddings)
-        else:
-            self.fake_embeds.append(embeddings)
-            
-    def compute(self):
-        if not self.real_embeds or not self.fake_embeds:
-            raise RuntimeError("No embeddings available to compute CMMD!")
+class CMMDDataset(Dataset):
+    def __init__(self, path, reshape_to, max_count=-1):
+        self.path = path
+        self.reshape_to = reshape_to
+
+        self.max_count = max_count
+        img_path_list = self._get_image_list()
+        if max_count > 0:
+            img_path_list = img_path_list[:max_count]
+        self.img_path_list = img_path_list
+
+    def __len__(self):
+        return len(self.img_path_list)
+
+    def _get_image_list(self):
+        ext_list = ["png", "jpg", "jpeg"]
+        image_list = []
+        for ext in ext_list:
+            image_list.extend(glob(f"{self.path}/*{ext}"))
+            image_list.extend(glob(f"{self.path}/*.{ext.upper()}"))
+        # Sort the list to ensure a deterministic output.
+        image_list.sort()
+        return image_list
+
+    def _center_crop_and_resize(self, im, size):
+        w, h = im.size
+        l = min(w, h)
+        top = (h - l) // 2
+        left = (w - l) // 2
+        box = (left, top, left + l, top + l)
+        im = im.crop(box)
+        # Note that the following performs anti-aliasing as well.
+        return im.resize((size, size), resample=Image.BICUBIC)  # pytype: disable=module-attr
+
+    def _read_image(self, path, size):
+        im = Image.open(path)
+        if size > 0:
+            im = self._center_crop_and_resize(im, size)
+        return np.asarray(im).astype(np.float32)
+
+    def __getitem__(self, idx):
+        img_path = self.img_path_list[idx]
+
+        x = self._read_image(img_path, self.reshape_to)
+        if x.ndim == 3:
+            return x
+        elif x.ndim == 2:
+            # Convert grayscale to RGB by duplicating the channel dimension.
+            return np.tile(x[Ellipsis, np.newaxis], (1, 1, 3))
         
-        real_embeds = torch.cat(self.real_embeds, dim=0)
-        fake_embeds = torch.cat(self.fake_embeds, dim=0)
-        
-        if real_embeds.shape[0] < self.subset_size or fake_embeds.shape[0] < self.subset_size:
-            raise RuntimeError(f"Need at least {self.subset_size} samples for real and fake embeddings!")
-        
-        # Compute MMD with polynomial kernel
-        def poly_kernel(X, Y, degree=3, gamma=None, coef0=1.0):
-            if gamma is None:
-                gamma = 1.0 / X.shape[1]
-            K = (gamma * torch.mm(X, Y.t()) + coef0) ** degree
-            return K
-
-        mmd_values = []
-        for _ in range(self.subsets):
-            # Randomly sample subsets
-            real_indices = torch.randperm(real_embeds.shape[0])[:self.subset_size]
-            fake_indices = torch.randperm(fake_embeds.shape[0])[:self.subset_size]
-            real_subset = real_embeds[real_indices]
-            fake_subset = fake_embeds[fake_indices]
-
-            XX = poly_kernel(real_subset, real_subset)
-            YY = poly_kernel(fake_subset, fake_subset)
-            XY = poly_kernel(real_subset, fake_subset)
-
-            m = real_subset.shape[0]
-            n = fake_subset.shape[0]
-
-            # MMD^2 = E[k(x,x)] + E[k(y,y)] - 2*E[k(x,y)]
-            mmd2 = (
-                (XX.sum() - XX.diag().sum()) / (m * (m - 1)) +
-                (YY.sum() - YY.diag().sum()) / (n * (n - 1)) -
-                2 * XY.sum() / (m * n)
-            )
-            mmd_values.append(mmd2.cpu().item())
-
-        # Reset embeddings
-        self.real_embeds = []
-        self.fake_embeds = []
-        
-        cmmd_mean = np.mean(mmd_values)
-        cmmd_std = np.std(mmd_values) if len(mmd_values) > 1 else 0.0
-        return cmmd_mean, cmmd_std
-    
-def compute_cmmd(
-    cfg, 
-    real_image_save_path: str, 
-    sample_image_save_path: str,
-    device: torch.device,
-    logger: logging.Logger,
+def compute_embeddings_for_dir(
+    img_dir,
+    embedding_model,
+    batch_size,
+    max_count=-1,
 ):
-    if not cfg.conductor["testing"]["CMMD"]["usage"]:
-        logger.info("CMMD not enabled, skipping.")
-        return None, None
-    
-    cmmd_params = cfg.conductor["testing"]["CMMD"]["params"]
-    cmmd = CMMDMetric(**cmmd_params)
-    logger.info("CMMD initialized")
-    
-    real_image_path_list = sorted(glob(os.path.join(real_image_save_path, "*_real_image_batch.pt")))
-    sample_image_path_list = sorted(glob(os.path.join(sample_image_save_path, "*_sample_image_batch.pt")))
-    
-    if len(real_image_path_list) == 0 or len(sample_image_path_list) == 0:
-        raise ValueError(f"Image not found! Check path:\nReal: {real_image_save_path}\nFake: {sample_image_save_path}")
+    """Computes embeddings for the images in the given directory.
 
-    assert len(real_image_path_list) == len(sample_image_path_list), "The number of real and fake photos does not match!"
+    This drops the remainder of the images after batching with the provided
+    batch_size to enable efficient computation on TPUs. This usually does not
+    affect results assuming we have a large number of images in the directory.
 
-    for real_path, sample_path in tqdm(
-        zip(real_image_path_list, sample_image_path_list),
-        total=len(real_image_path_list),
-        desc="Computing CMMD",
-        disable=False
-    ):
-        real_image_batch = torch.load(real_path).to(device)
-        sample_image_batch = torch.load(sample_path).to(device)
+    Args:
+        img_dir: Directory containing .jpg or .png image files.
+        embedding_model: The embedding model to use.
+        batch_size: Batch size for the embedding model inference.
+        max_count: Max number of images in the directory to use.
 
-        if real_image_batch.shape[0] < 2 or sample_image_batch.shape[0] < 2:
-            raise RuntimeError("Each batch must have at least 2 images!")
+    Returns:
+        Computed embeddings of shape (num_images, embedding_dim).
+    """
+    dataset = CMMDDataset(img_dir, reshape_to=embedding_model.input_image_size, max_count=max_count)
+    count = len(dataset)
+    print(f"Calculating embeddings for {count} images from {img_dir}.")
 
-        # Ensure images are in [0, 1]
-        real_image_batch = torch.clamp(real_image_batch, 0, 1)
-        sample_image_batch = torch.clamp(sample_image_batch, 0, 1)
+    dataloader = DataLoader(dataset, batch_size=batch_size)
 
-        cmmd.update(real_image_batch, real=True)
-        cmmd.update(sample_image_batch, real=False)
+    all_embs = []
+    for batch in tqdm(dataloader, total=count // batch_size):
+        image_batch = batch.numpy()
 
-    cmmd_mean, cmmd_std = cmmd.compute()
-    logger.info(f"CMMD result: Mean {cmmd_mean:.6f} - STD {cmmd_std:.6f}")
-        
-    return cmmd_mean, cmmd_std
+        # Normalize to the [0, 1] range.
+        image_batch = image_batch / 255.0
+
+        if np.min(image_batch) < 0 or np.max(image_batch) > 1:
+            raise ValueError(
+                "Image values are expected to be in [0, 1]. Found:" f" [{np.min(image_batch)}, {np.max(image_batch)}]."
+            )
+
+        # Compute the embeddings using a pmapped function.
+        embs = np.asarray(
+            embedding_model.embed(image_batch)
+        )  # The output has shape (num_devices, batch_size, embedding_dim).
+        all_embs.append(embs)
+
+    all_embs = np.concatenate(all_embs, axis=0)
+
+    return all_embs
+
+def compute_cmmd(cfg, real_image_path, sample_image_path, device: torch.device, ref_embed_file=None):
+    if not cfg.conductor.testing.CMMD.usage:
+        return None
+    logging.info('CMMD initialized')
     
-# if __name__ == "__main__":
-#     from omegaconf import OmegaConf
-#     cfg = OmegaConf.load("./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/.hydra/config.yaml")
+    params = cfg.conductor.testing.CMMD.params
     
-#     logging.basicConfig(level=logging.INFO)
-#     logger = logging.getLogger("Evaluate clean-fid & clean-kid")
-#     logger.info("Starting elvaluate")
+    if real_image_path and ref_embed_file:
+        raise ValueError("`real_image_path` and `ref_embed_file` both cannot be set at the same time.")
+
+    embedding_model = ClipEmbeddingModel(CLIP_MODEL_NAME=cfg.conductor.testing.CMMD.CLIP_MODEL_NAME, device=device)
+    if ref_embed_file is not None:
+        real_embs = np.load(ref_embed_file).astype('float32')
+    else:
+        real_embs = compute_embeddings_for_dir(real_image_path, embedding_model, **params).astype('float32')
     
-#     real_image_save_path = "./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/real_images/cond_scale6_loss_weighting_p2/42"
-#     sample_image_save_path = "./results/testing/vindr_multiphase_imagen/unet1/cond_scale_6/2025-04-27_13-57-03/sample_images/cond_scale6_loss_weighting_p2/42"
-    
-#     idx = 0
-#     device = torch.device(f"cuda:{idx}" if torch.cuda.is_available() else "cpu")
-    
-#     cmmd_mean, cmmd_std = compute_cmmd(
-#         cfg=cfg,
-#         real_image_save_path=real_image_save_path,
-#         sample_image_save_path=sample_image_save_path,
-#         device=device,
-#         logger=logger
-#     )
-    
-#     print(f"Result {cmmd_mean}, {cmmd_std}")
+    sample_embs = compute_embeddings_for_dir(sample_image_path, embedding_model, **params).astype('float32')
+    val = mmd(real_embs, sample_embs)
+    cmmd_result = val.numpy()
+    logging.info(f"CMMD result: {cmmd_result:0.2f}")
+    return cmmd_result
+
+if __name__ == '__main__':
+    from omegaconf import OmegaConf
+    device = torch.device('cuda')
+    cfg = OmegaConf.load('/media/mountHDD1/users/duong/git/scratch/MultiphaseBioImgGen/src/metrics/test.yaml')
+    cmmd_result = compute_cmmd(
+        cfg,
+        real_image_path='/media/mountHDD1/users/duong/git/scratch/MultiphaseBioImgGen/results/testing/vindr_multiphase_imagen/unet2/dim128v1/cond_drop_prob0.1/real_images/cond_scale6/seed42/images',
+        sample_image_path='/media/mountHDD1/users/duong/git/scratch/MultiphaseBioImgGen/results/testing/vindr_multiphase_imagen/unet2/dim128v1/cond_drop_prob0.1/samples/cond_scale6/seed42/images',
+        device=device
+    )

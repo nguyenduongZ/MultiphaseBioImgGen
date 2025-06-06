@@ -1,0 +1,88 @@
+###
+mode: training
+unet: 1
+cond_scale: 1.75
+seed: 42
+idx: 0
+iterations: 100000
+
+###
+trainer:
+  lr: 1e-4
+
+  split_valid_from_train: false
+  
+###
+display_samples: True
+validate_at_every: 100
+sample_at_every: 25000
+save_at_every: 25000
+
+###
+testing:
+  save_samples: True
+  save_image_tensors: True
+
+  lower_batch: 0
+  upper_batch: 300
+  batch_interval: 50
+
+  # Frechet Inception Distance
+  FrechetInceptionDistance:
+    usage: True
+    params:
+      feature: 2048
+      reset_real_features: True
+      normalize: True
+
+  # Kernel Inception Distance
+  KernelInceptionDistance:
+    usage: True
+    params:
+      feature: 2048
+      subsets: 100
+      subset_size: 768
+      reset_real_features: True
+      normalize: True
+
+  # Clean Fréchet Inception Distance
+  CleanFID:
+    usage: True
+    params:
+      mode: clean
+      model_name: inception_v3
+      num_workers: 4
+      batch_size: 32 
+
+  # Fréchet CLIP Distance
+  FrechetCLIPDistance:
+    usage: True
+    params:
+      mode: clean
+      model_name: clip_vit_b_32
+      num_workers: 4
+      batch_size: 32 
+
+  # LearnedPerceptualImagePatchSimilarity
+  LearnedPerceptualImagePatchSimilarity:
+    usage: False
+    params:
+      net_type: vgg
+
+  # CMMD
+  CMMD:
+    usage: True
+    CLIP_MODEL_NAME: openai/clip-vit-large-patch14-336
+    params:
+      batch_size: 32
+      max_count: -1
+
+###
+wandb:
+  usage: False
+  wandb_prj: # Name project
+  wandb_entity: # wandb_entity
+
+###
+tensorboard:
+  usage: False
