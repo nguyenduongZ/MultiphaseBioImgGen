@@ -1,0 +1,54 @@
+name: vindr_multiphase
+    
+PATH_DICOM_DIR: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/abdomen_phases'
+PATH_METADATA_PROMPT_FILE: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/metadata_prompt.csv'
+    
+t5_embeddings:
+  usage: true
+  train: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/t5_embeddings_base/train.pt'
+  valid: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/t5_embeddings_base/valid.pt'
+  test: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/t5_embeddings_base/test.pt'
+
+biomed_embeddings:
+  train: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/biobert_embeddings/train.pt'
+  valid: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/biobert_embeddings/valid.pt'
+  test: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/biobert_embeddings/test.pt'
+
+image_size: 512
+
+preprocessing:  
+  window_center: 40
+  window_width: 400
+
+augmentation:
+  image_size: 256
+  horizontal_flip:
+    params:
+      p: 0.2
+  affine:
+    params:
+      translate_percent: 0.0625
+      scale: [0.9, 1.1]
+      rotate: [-3, 3]
+      p: 0.2
+
+classes:
+  Non contrast: non contrast
+  Arterial: arterial
+  Venous: venous
+  Other: other
+
+num_classes: 4
+
+## DataLoader:
+batch_size: 16
+num_workers: 4
+pin_memory: True
+shuffle: True
+
+num_train_sample: 
+num_valid_sample: 
+num_test_sample: 
+num_train_batch:
+num_valid_batch:
+num_test_batch:
