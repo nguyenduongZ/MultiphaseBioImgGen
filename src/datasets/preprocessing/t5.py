@@ -11,7 +11,6 @@ import pandas as pd
 from tqdm import tqdm
 from imagen_pytorch.t5 import *
 
-from .utils import set_text_embed_dim
 
 def text_t5_embedding(
     cfg,
@@ -38,7 +37,6 @@ def text_t5_embedding(
     elif cfg.model.name == 'elucidated_imagen':
         DEFAULT_T5_NAME = cfg.model.elucidated_imagen.text_encoder_name
     model, tokenizer = get_model_and_tokenizer(DEFAULT_T5_NAME)
-    set_text_embed_dim(cfg, DEFAULT_T5_NAME, model)
     token_lens = [len(tokenizer.encode(text, truncation=True)) for text in all_texts_unique_list]
     
     optimal_length = int(np.percentile(token_lens, 95))

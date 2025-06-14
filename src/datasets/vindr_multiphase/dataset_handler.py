@@ -13,13 +13,13 @@ from sklearn.model_selection import train_test_split
 
 from src.datasets.preprocessing import convert_pixel_to_hu, apply_window, get_text_embeddings
 
-class VindrMultiphase(Dataset):
+class VinDrMultiphase(Dataset):
     def __init__(self, cfg, split: str):
         self.cfg = cfg
         self.split = split
         super().__init__(
             folder=self.cfg.data.PATH_DICOM_DIR, 
-            image_size=self.cfg.data.augmentation.image_size
+            image_size=self.cfg.data.image_size
         )
         
         self.set_df_splits()
@@ -66,13 +66,15 @@ class VindrMultiphase(Dataset):
         self.full_df = df
         
     def set_transforms(self):
+        resized = A.Resize(64, 64)
         if self.split == 'train':
             transforms = [
                 A.HorizontalFlip(**self.cfg.data.augmentation.horizontal_flip.params),
-                A.Affine(**self.cfg.data.augmentation.affine.params, mode=cv2.BORDER_CONSTANT)
+                A.Affine(**self.cfg.data.augmentation.affine.params, border_mode=cv2.BORDER_CONSTANT),
+                resized
             ]
         else:
-            transforms = []
+            transforms = [resized]
             
         self.transform = A.Compose(transforms)
 
@@ -97,7 +99,7 @@ class VindrMultiphase(Dataset):
             logging.error(msg)
             raise ValueError(msg)
         
-        return len(self.group_keys) if self.return_3d else len(self.df)
+        return len(self.df)
     
     def __getitem__(self, idx):
         if self.df is None or self.embeddings is None:

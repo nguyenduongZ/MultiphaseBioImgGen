@@ -18,7 +18,7 @@ def main(cfg: DictConfig):
     
     # Seed setup
     seed = cfg.conductor.seed
-    setup_seed(seed=seed)
+    setup_seed(seed=seed, deterministic=True, benchmark=False)
     
     # Device setup
     idx = cfg.conductor.idx

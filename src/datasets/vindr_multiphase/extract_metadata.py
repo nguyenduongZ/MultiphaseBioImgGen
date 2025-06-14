@@ -76,9 +76,10 @@ def process_files(dcm_files, output_csv, workers, project_root):
                     writer.writerow(result)
 
 def main():
-    _root = './data/vindr_multiphase'
+    # _root = './data/vindr_multiphase'
+    _root = '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase'
     dcm_dir = os.path.join(_root, 'abdomen_phases')
-    output_csv = os.path.join(_root, "metadata1.csv")
+    output_csv = os.path.join(_root, "metadata.csv")
 
     if not os.path.exists(dcm_dir):
         msg = f"DICOM directory not found: {dcm_dir}"
