@@ -4,7 +4,8 @@ unet: 1
 cond_scale: 1.75
 seed: 42
 idx: 0
-iterations: 100000
+iterations: 50000
+checkpoint_path: checkpoint.pt
 
 ###
 trainer:
