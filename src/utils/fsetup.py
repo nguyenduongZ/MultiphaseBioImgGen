@@ -15,7 +15,7 @@ def cfg_to_name(cfg):
         cond_dim = dim
 
     mults = '-'.join(map(str, unet_cfg['dim_mults']))
-    res = unet_cfg['num_resnet_blocks']
+    res = '-'.join(map(str, unet_cfg['num_resnet_blocks']))
     attn = ''.join(['1' if x else '0' for x in unet_cfg['layer_attns']])
     xattn = ''.join(['1' if x else '0' for x in unet_cfg['layer_cross_attns']])
     return f'dim{dim}_cond{cond_dim}_mults{mults}_res{res}_attn{attn}_xattn{xattn}'
