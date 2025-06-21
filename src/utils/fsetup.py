@@ -18,7 +18,8 @@ def cfg_to_name(cfg):
     res = '-'.join(map(str, unet_cfg['num_resnet_blocks']))
     attn = ''.join(['1' if x else '0' for x in unet_cfg['layer_attns']])
     xattn = ''.join(['1' if x else '0' for x in unet_cfg['layer_cross_attns']])
-    return f'dim{dim}_cond{cond_dim}_mults{mults}_res{res}_attn{attn}_xattn{xattn}'
+    lr = f"{(cfg.training.learning_rate):.0e}"
+    return f'dim{dim}_cond{cond_dim}_mults{mults}_res{res}_attn{attn}_xattn{xattn}_lr{lr}'
 
 def folder_setup(cfg):
     dataset_name = cfg.data.name
@@ -131,6 +132,12 @@ class LogExporter:
                 step=self.iteration
             )
 
+    def log_checkpoint(self, file_path, name=None):
+        if self.run and os.path.exists(file_path):
+            artifact = wandb.Artifact(name or os.path.basename(file_path), type='checkpoint')
+            artifact.add_file(file_path)
+            self.run.log_artifact(artifact)
+        
     def close(self):
         if self.run:
             self.run.finish()

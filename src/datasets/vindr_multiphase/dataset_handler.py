@@ -61,8 +61,8 @@ class VinDrMultiphase(Dataset):
         self.test_df = df[df['StudyInstanceUID'].isin(test_studies)].reset_index(drop=True)
         
         self.train_df.attrs['split'] = 'train'
-        self.train_df.attrs['split'] = 'valid'
-        self.train_df.attrs['split'] = 'test'
+        self.valid_df.attrs['split'] = 'valid'
+        self.test_df.attrs['split'] = 'test'
         self.full_df = df
         
     def set_transforms(self):

@@ -1,18 +1,13 @@
 name: vindr_multiphase
     
-PATH_DICOM_DIR: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/abdomen_phases'
-PATH_METADATA_PROMPT_FILE: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/metadata_prompt.csv'
+PATH_DICOM_DIR: # path
+PATH_METADATA_PROMPT_FILE: # path
     
 t5_embeddings:
   usage: true
-  train: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/t5_embeddings_base/train.pt'
-  valid: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/t5_embeddings_base/valid.pt'
-  test: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/t5_embeddings_base/test.pt'
-
-biomed_embeddings:
-  train: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/biobert_embeddings/train.pt'
-  valid: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/biobert_embeddings/valid.pt'
-  test: '/mnt/sda1/home/bmestaging/duong/git/duong_database/data/vindr_multiphase/biobert_embeddings/test.pt'
+  train: # path '/t5_embeddings_base/train.pt'
+  valid: # path '/t5_embeddings_base/valid.pt'
+  test: # path 't5_embeddings_base/test.pt'
 
 image_size: 512
 

@@ -7,13 +7,9 @@ imagen:
   condition_on_text: true
   cond_drop_prob: 0.1
 
-
-  # text_encoder_name: google/t5-v1_1-base 
-  # text_embed_dim: 768
-  
-  text_encoder_name: dmis-lab/biobert-base-cased-v1.1
+  text_encoder_name: google/t5-v1_1-base 
   text_embed_dim: 768
-
+  
   loss_type: l2
   noise_schedules: cosine
   pred_objectives: noise

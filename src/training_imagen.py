@@ -77,7 +77,12 @@ def train_imagen(cfg, model, device, train_dl, valid_dl, run_dir, run_name):
                         
                     for j in range(len(orig_images_pil)):
                         orig_img, prompt, gen_img = orig_images_pil[j], text_batches[j], sample_images[j]
-                        grid_image = create_grid_image(orig_img, prompt, gen_img)
+                        
+                        if unet == 1:
+                            grid_image = create_grid_image(orig_img, prompt, gen_img, grid_size=(100, 100))
+                        else:
+                            grid_image = create_grid_image(orig_img, prompt, gen_img)
+                            
                         image_save_path = os.path.join(sample_images_path, f"iter{i:06d}-{j:05d}.png")
                         grid_image.save(image_save_path)
                         log_exporter.log_images(grid_image, prompt)
@@ -94,6 +99,7 @@ def train_imagen(cfg, model, device, train_dl, valid_dl, run_dir, run_name):
             checkpoint_file = model_checkpoint_path(i)
             trainer.save(checkpoint_file)
             logging.info(f"Saved checkpoint at iteration {i}: {checkpoint_file}")
+            log_exporter.log_checkpoint(checkpoint_file, name=f"checkpoint_iter_{i:06d}")
 
         avg_train_time = total_train_time / (i+1)
         avg_sample_time = total_sample_time / sample_count if sample_count > 0 else 0
@@ -108,7 +114,8 @@ def train_imagen(cfg, model, device, train_dl, valid_dl, run_dir, run_name):
         
     trainer.save(model_final_save_path)
     logging.info(f"Saved final checkpoint: {model_final_save_path}")
-
+    log_exporter.log_checkpoint(model_final_save_path, name="checkpoint_final")
+    
     logging.info(f"Total training time: {total_train_time:.4f} seconds for {iterations} iterations")
     logging.info(f"Average training time per step: {total_train_time / iterations:.4f} seconds")
     if sample_count > 0:
