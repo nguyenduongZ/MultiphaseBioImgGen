@@ -66,8 +66,15 @@ class ImagenBuilder:
             
         if torch.cuda.is_available():
             self.imagen_model = self.imagen_model.to(self.device)
+            
+        logging.info("Model Size per Unet:")
+        for idx, unet in enumerate(self.unets):
+            if torch.cuda.is_available():
+                unet = unet.to(self.device)
+            size_gb = get_model_size(unet)
+            logging.info(f"  - Unet {idx + 1}: {size_gb:.2f} GB")
         
-        logging.info(f"Model Size: {(get_model_size(self.imagen_model)):.2f} GB")
+        logging.info(f"Total Model Size (Imagen): {(get_model_size(self.imagen_model)):.2f} GB")
         
     def build_trainer(self):
         if self.cfg.data.t5_embeddings.usage:

@@ -18,7 +18,7 @@ def cfg_to_name(cfg):
     res = '-'.join(map(str, unet_cfg['num_resnet_blocks']))
     attn = ''.join(['1' if x else '0' for x in unet_cfg['layer_attns']])
     xattn = ''.join(['1' if x else '0' for x in unet_cfg['layer_cross_attns']])
-    lr = f"{(cfg.training.learning_rate):.0e}"
+    lr = f"{(cfg.conductor.trainer.lr):.0e}"
     return f'dim{dim}_cond{cond_dim}_mults{mults}_res{res}_attn{attn}_xattn{xattn}_lr{lr}'
 
 def folder_setup(cfg):
