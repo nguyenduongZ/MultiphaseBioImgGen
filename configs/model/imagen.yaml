@@ -20,7 +20,7 @@ imagen:
 
   unets:
     - dim: 128
-      cond_dim: 256
+      # cond_dim: 256
       dim_mults: [1, 2, 4, 4]
       num_resnet_blocks: [2, 2, 2, 2]
       layer_attns: [false, true, true, true]
@@ -28,7 +28,7 @@ imagen:
       attn_heads: 8
 
     - dim: 160
-      cond_dim: 256
+      # cond_dim: 256
       dim_mults: [1, 2, 3, 4]
       num_resnet_blocks: [2, 3, 4, 4]
       layer_attns: [false, true, true, true]
@@ -36,7 +36,7 @@ imagen:
       attn_heads: 8
 
     - dim: 192
-      cond_dim: 256
+      # cond_dim: 256
       dim_mults: [1, 2, 4, 8]
       num_resnet_blocks: [2, 4, 8, 8]
       layer_attns: [false, false, false, true]

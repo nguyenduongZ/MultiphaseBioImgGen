@@ -4,7 +4,7 @@ unet: 1
 cond_scale: 1.75
 seed: 42
 idx: 0
-iterations: 50000
+iterations: 25000
 checkpoint_path: checkpoint.pt
 
 ###
@@ -15,9 +15,9 @@ trainer:
   
 ###
 display_samples: True
-validate_at_every: 100
-sample_at_every: 25000
-save_at_every: 25000
+validate_at_every: 50
+sample_at_every: 5000
+save_at_every: 5000
 
 ###
 testing:
@@ -81,7 +81,7 @@ testing:
 ###
 wandb:
   usage: False
-  wandb_prj: # Name project
+  wandb_prj: MultiphaseGen
   wandb_entity: # wandb_entity
 
 ###

@@ -5,9 +5,9 @@ PATH_METADATA_PROMPT_FILE: # path
     
 t5_embeddings:
   usage: true
-  train: # path '/t5_embeddings_base/train.pt'
-  valid: # path '/t5_embeddings_base/valid.pt'
-  test: # path 't5_embeddings_base/test.pt'
+  train: '/t5_embeddings_base/train.pt'
+  valid: '/t5_embeddings_base/valid.pt'
+  test: 't5_embeddings_base/test.pt'
 
 image_size: 512
 
@@ -37,7 +37,7 @@ num_classes: 4
 
 ## DataLoader:
 batch_size: 16
-num_workers: 4
+num_workers: 8
 pin_memory: True
 shuffle: True
 
