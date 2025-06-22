@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from .t5 import text_t5_embedding
-from .bio import biomed_encode_text
+# from .bio import biomed_encode_text
 
 DEFAULT_BATCH_SIZE = 128
 
@@ -38,7 +38,7 @@ def get_text_embeddings(
         
     embedding_mapping = {
         't5': text_t5_embedding,
-        'biobert': biomed_encode_text
+        # 'biobert': biomed_encode_text
         # Add here
     }
     
