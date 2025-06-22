@@ -19,26 +19,24 @@ imagen:
   dynamic_thresholding_percentile: 0.95   # unsure what this was based on perusal of paper
 
   unets:
-    - dim: 128
-      # cond_dim: 256
+    - dim: 160
       dim_mults: [1, 2, 4, 4]
       num_resnet_blocks: [2, 2, 2, 2]
       layer_attns: [false, true, true, true]
       layer_cross_attns: [false, true, true, true]
       attn_heads: 8
 
-    - dim: 160
-      # cond_dim: 256
-      dim_mults: [1, 2, 3, 4]
+    - dim: 192
+      dim_mults: [1, 2, 4, 8]
       num_resnet_blocks: [2, 3, 4, 4]
       layer_attns: [false, true, true, true]
       layer_cross_attns: [false, true, true, true]
       attn_heads: 8
 
-    - dim: 192
-      # cond_dim: 256
+    - dim: 224
       dim_mults: [1, 2, 4, 8]
-      num_resnet_blocks: [2, 4, 8, 8]
-      layer_attns: [false, false, false, true]
-      layer_cross_attns: [false, false, false, true]
-      attn_heads: 12  
+      num_resnet_blocks: [2, 4, 6, 6]
+      layer_attns: [false, false, true, true]
+      layer_cross_attns: [false, false, true, true]
+      attn_heads: 12
+
