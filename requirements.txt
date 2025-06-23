@@ -20,3 +20,5 @@ transformers>=4.38
 scikit-learn
 clean-fid
 imagen-pytorch
+openai-clip
+torchmetrics[image]
