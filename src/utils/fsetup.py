@@ -5,8 +5,10 @@ from omegaconf import OmegaConf
 from torch.utils.tensorboard import SummaryWriter
 
 def cfg_to_name(cfg):
-    def compress(lst):
-        return str(lst[0]) if all(x == lst[0] for x in lst) else '-'.join(map(str, lst))
+    def compress(val):
+        if isinstance(val, list):
+            return str(val[0]) if all(x == val[0] for x in val) else '-'.join(map(str, val))
+        return str(val)
 
     model_name = cfg.model.name
     unet_idx = cfg.conductor.unet - 1
