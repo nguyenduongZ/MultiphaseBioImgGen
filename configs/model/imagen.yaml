@@ -7,21 +7,21 @@ imagen:
   condition_on_text: true
   cond_drop_prob: 0.1
 
-  text_encoder_name: google/t5-v1_1-base 
+  text_encoder_name: google/t5-v1_1-base
   text_embed_dim: 768
-  
+
   loss_type: l2
   noise_schedules: cosine
   pred_objectives: noise
   lowres_noise_schedule: linear
   lowres_sample_noise_level: 0.2          # in the paper, they present a new trick where they noise the lowres conditioning image, and at sample time, fix it to a certain level (0.1 or 0.3) - the unets are also made to be conditioned on this noise level
-  only_train_unet_number: None
+  only_train_unet_number: 1
   dynamic_thresholding_percentile: 0.95   # unsure what this was based on perusal of paper
 
   unets:
     - dim: 160
-      dim_mults: [1, 2, 4, 4]
-      num_resnet_blocks: [2, 2, 2, 2]
+      dim_mults: [1, 2, 3, 4]
+      num_resnet_blocks: 3
       layer_attns: [false, true, true, true]
       layer_cross_attns: [false, true, true, true]
       attn_heads: 8
@@ -29,14 +29,14 @@ imagen:
     - dim: 192
       dim_mults: [1, 2, 4, 8]
       num_resnet_blocks: [2, 3, 4, 4]
-      layer_attns: [false, true, true, true]
-      layer_cross_attns: [false, true, true, true]
+      layer_attns: [false, false, false, true]
+      layer_cross_attns: [false, false, false, true]
       attn_heads: 8
 
     - dim: 224
       dim_mults: [1, 2, 4, 8]
-      num_resnet_blocks: [2, 4, 6, 6]
-      layer_attns: [false, false, true, true]
-      layer_cross_attns: [false, false, true, true]
-      attn_heads: 12
+      num_resnet_blocks: [2, 4, 8, 8]
+      layer_attns: [false, false, false, true]
+      layer_cross_attns: [false, false, false, true]
+      attn_heads: 8
 

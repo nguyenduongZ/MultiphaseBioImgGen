@@ -5,20 +5,24 @@ from omegaconf import OmegaConf
 from torch.utils.tensorboard import SummaryWriter
 
 def cfg_to_name(cfg):
+    def compress(lst):
+        return str(lst[0]) if all(x == lst[0] for x in lst) else '-'.join(map(str, lst))
+
     model_name = cfg.model.name
     unet_idx = cfg.conductor.unet - 1
     unet_cfg = cfg.model[model_name]['unets'][unet_idx]
-    
-    dim = unet_cfg['dim']
-    cond_dim = unet_cfg.get('cond_dim')
-    if cond_dim is None:
-        cond_dim = dim
 
-    mults = '-'.join(map(str, unet_cfg['dim_mults']))
-    res = '-'.join(map(str, unet_cfg['num_resnet_blocks']))
+    dim = unet_cfg['dim']
+    cond_dim = unet_cfg.get('cond_dim', dim)
+
+    mults = compress(unet_cfg['dim_mults'])
+    res = compress(unet_cfg['num_resnet_blocks'])
+
     attn = ''.join(['1' if x else '0' for x in unet_cfg['layer_attns']])
     xattn = ''.join(['1' if x else '0' for x in unet_cfg['layer_cross_attns']])
-    lr = f"{(cfg.conductor.trainer.lr):.0e}"
+
+    lr = f"{cfg.conductor.trainer.lr:.0e}"
+
     return f'dim{dim}_cond{cond_dim}_mults{mults}_res{res}_attn{attn}_xattn{xattn}_lr{lr}'
 
 def folder_setup(cfg):
