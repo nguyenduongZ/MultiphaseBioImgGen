@@ -7,7 +7,9 @@ from torch.utils.tensorboard import SummaryWriter
 def cfg_to_name(cfg):
     def compress(val):
         if isinstance(val, list):
-            return str(val[0]) if all(x == val[0] for x in val) else '-'.join(map(str, val))
+            if all(x == val[0] for x in val):
+                return str(val[0])
+            return '-'.join(map(str, val))
         return str(val)
 
     model_name = cfg.model.name
